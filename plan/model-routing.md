@@ -56,17 +56,17 @@ A scripted provider for tests: a queue of responses, optional artificial latency
 The Blueprint names **profiles**; the deployment resolves them.
 
 ```jsonc
-// blueprint.json (Blueprint) — behavior only
+// loom.json (Blueprint) — behavior only
 "routing": {
   "reasoner":   { "provider": "anthropic", "model": "claude-sonnet-4", "temperature": 0.2 },
   "worker":     { "provider": "local",     "model": "qwen3-coder-30b", "temperature": 0.1 },
   "summarizer": { "provider": "local",     "model": "qwen3-4b",        "temperature": 0.0 }
 }
 
-// deployment.json — endpoints, credentials, prices
+// loom.deployment.json — endpoints, credentials, prices
 "providers": {
   "anthropic": { "baseUrl": "https://api.anthropic.com", "apiKeyEnv": "ANTHROPIC_API_KEY" },
-  "local":     { "baseUrl": "http://localhost:8080/v1",  "apiKeyEnv": null }
+  "local":     { "baseUrl": "http://localhost:8080/v1" }
 },
 "prices": {
   "claude-sonnet-4": { "inputPer1M": 3.00, "cachedInputPer1M": 0.30, "outputPer1M": 15.00 },
@@ -100,15 +100,22 @@ Costs roll up: per call → per agent → per run. The manifest records all thre
 
 ---
 
-## 4. Budget enforcement
+## 4. Spend visibility, not enforcement
 
-| Guard | Threshold | Behavior |
-|---|---|---|
-| Soft warning | `maxCostUsd × 0.8` | An event is logged; the run continues. |
-| Hard stop | `maxCostUsd` | The active agent finishes its turn, then the run halts with a `budget_exceeded` card; unfinished children are cancelled; their worktrees are removed. |
-| Token ceiling | `maxTokensPerRun` | Same as hard stop. |
+Loom **measures** spend and does **not** stop a run over it. That is deliberate: the engine is built to run unattended against cheap or local models, where a dollar ceiling either fires on healthy work or never fires at all — the same reasoning that keeps Loom from imposing a wall-clock timeout.
 
-A hard stop never leaves partial work committed: the check happens **before** a commit, so a budget-halted agent contributes no branch.
+What actually bounds a runaway run is structural, not financial:
+
+| Bound | What it limits |
+|---|---|
+| `budgets.maxAgentDepth` | Recursion — a tree cannot grow deeper than this. |
+| The per-role turn limit | A single role cannot spin forever. |
+| `budgets.toolTimeoutSeconds` | A hung tool is aborted. |
+| The deployment container | The outer boundary: `docker stop` ends a pathological run. |
+
+Cost is recorded per call → per agent → per run, with a per-model breakdown, so a run is *attributable* even though it is never *interrupted*.
+
+An optional `alerts` block in the Blueprint can name a dollar or token threshold. Crossing it emits an event and nothing else — an alert is a signal to look, never a lever that stops work.
 
 ---
 
@@ -131,4 +138,4 @@ The reference implementation's single-model design forces one of two bad outcome
 - `openai-compatible` client: tool-call parsing, usage mapping, and error mapping tested against a fake `fetch`.
 - Router: every role resolves to a profile; an unknown profile is a load error.
 - Cost math: cached vs uncached input, zero-priced local models, and rounding are unit-tested.
-- Budget: a scripted run that crosses `maxCostUsd` halts with `budget_exceeded` and produces no commit.
+- Alert: a scripted run that crosses its `alerts.costUsd` threshold emits an event and **runs to completion**.

@@ -6,8 +6,8 @@ Two files, deliberately separate:
 
 | File | Holds | Who writes it |
 |---|---|---|
-| `blueprint.json` (**the Blueprint**) | roles, prompts, tools, routing **profile names**, budgets, permissions | the tuner |
-| `deployment.json` (**deployment**) | provider endpoints, credentials, model ids, prices | the operator |
+| `loom.json` (**the Blueprint**) | roles, prompts, tools, routing **profile names**, budgets, permissions | the tuner |
+| `loom.deployment.json` (**deployment**) | provider endpoints, credentials, model ids, prices | the operator |
 
 The tuner must never be able to leak a credential into the artifact it optimizes, and a run must be reproducible across deployments. Hence the split.
 
@@ -96,15 +96,17 @@ The Blueprint names **profiles**; the deployment resolves a profile to an endpoi
 
 ---
 
-## 5. Budgets and permissions
+## 5. Budgets, alerts, and permissions
 
 ```jsonc
 "budgets": {
   "maxAgentDepth": 6,
   "maxConcurrentAgents": 8,
-  "maxCostUsd": 5.0,
-  "maxTokensPerRun": 2000000,
   "toolTimeoutSeconds": 60
+},
+"alerts": {
+  "costUsd": 5.0,
+  "tokens": 2000000
 },
 "permissions": {
   "mode": "workspace-write",
@@ -112,15 +114,19 @@ The Blueprint names **profiles**; the deployment resolves a profile to an endpoi
 }
 ```
 
+`budgets` holds limits the engine **enforces**. `alerts` holds thresholds it merely **reports** on — the split is the schema telling the truth about what each field does.
+
 | Field | Meaning |
 |---|---|
-| `maxAgentDepth` | Recursion ceiling; an `agent` call beyond it is refused with `depth_exceeded`. |
-| `maxConcurrentAgents` | Pool ceiling. |
-| `maxCostUsd` | Hard spend ceiling; crossing it halts the run with `budget_exceeded`. |
-| `maxTokensPerRun` | Hard token ceiling. |
-| `toolTimeoutSeconds` | Default per-tool timeout; a call may request less, never more. |
+| `budgets.maxAgentDepth` | Recursion ceiling; an `agent` call beyond it is refused with `depth_exceeded`. |
+| `budgets.maxConcurrentAgents` | How many model calls may be in flight at once. |
+| `budgets.toolTimeoutSeconds` | Default per-tool timeout; a call may request less, never more. |
+| `alerts.costUsd` | Optional. Crossing it emits an event. **The run is not stopped.** |
+| `alerts.tokens` | Optional. Crossing it emits an event. **The run is not stopped.** |
 | `permissions.mode` | `read-only` \| `workspace-write` \| `full`. Enforced before any mutating tool runs. |
 | `permissions.requireApproval` | Tool names that must be approved before execution. |
+
+Spend is measured and recorded, never enforced — see [model-routing.md](model-routing.md) "Spend visibility, not enforcement" for why.
 
 Details: [security.md](security.md).
 
@@ -149,7 +155,7 @@ Display-only metadata so a swapped Blueprint re-flavors the UI with no frontend 
     "reasoner": { "provider": "anthropic", "model": "claude-sonnet-4", "temperature": 0.2 },
     "worker":   { "provider": "local",     "model": "qwen3-coder-30b", "temperature": 0.1 }
   },
-  "budgets": { "maxAgentDepth": 6, "maxConcurrentAgents": 8, "maxCostUsd": 5.0, "toolTimeoutSeconds": 60 },
+  "budgets": { "maxAgentDepth": 6, "maxConcurrentAgents": 8, "toolTimeoutSeconds": 60 },
   "permissions": { "mode": "workspace-write" }
 }
 ```

@@ -39,6 +39,7 @@ export function loadBlueprint(dependencies: BlueprintLoaderDependencies, bluepri
 		tools: manifests,
 		routing: file.routing,
 		budgets: file.budgets,
+		alerts: file.alerts,
 		permissions: file.permissions,
 	}
 }

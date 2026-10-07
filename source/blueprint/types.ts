@@ -52,12 +52,21 @@ export interface RoutingProfile {
 	readonly maxTokens?: number
 }
 
+/** Limits the engine **enforces**. */
 export interface Budgets {
 	readonly maxAgentDepth: number
 	readonly maxConcurrentAgents: number
-	readonly maxCostUsd: number
-	readonly maxTokensPerRun: number
 	readonly toolTimeoutSeconds: number
+}
+
+/**
+ * Thresholds the engine merely **reports** on: crossing one emits an event and
+ * never stops a run. Spend is measured, not enforced — see
+ * [`plan/model-routing.md`](../../plan/model-routing.md).
+ */
+export interface Alerts {
+	readonly costUsd?: number
+	readonly tokens?: number
 }
 
 export interface Permissions {
@@ -79,6 +88,7 @@ export interface BlueprintFile {
 	readonly toolPaths: readonly string[]
 	readonly routing: Readonly<Record<string, RoutingProfile>>
 	readonly budgets: Budgets
+	readonly alerts: Alerts
 	readonly permissions: Permissions
 }
 
@@ -89,6 +99,7 @@ export interface LoadedBlueprint {
 	readonly tools: readonly ToolManifest[]
 	readonly routing: Readonly<Record<string, RoutingProfile>>
 	readonly budgets: Budgets
+	readonly alerts: Alerts
 	readonly permissions: Permissions
 }
 

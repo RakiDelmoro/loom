@@ -50,7 +50,9 @@ A rejected Blueprint reports the exact path that is wrong and exits non-zero:
 ## Layout
 
 ```
-loom.json      the example Blueprint (roles, tools, routing, budgets, permissions)
+loom.json      the example Blueprint (roles, tools, routing, budgets, alerts)
+loom.deployment.json  providers, endpoints, and model prices; credentials are
+               named here and read from the environment, never stored
 tools/         tool manifests, referenced by path from the Blueprint
 prompts/       role system prompts, referenced by path from the Blueprint
 plan/          the design documents and roadmap

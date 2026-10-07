@@ -34,9 +34,17 @@ export type RunEvent =
 			readonly sha: string | null
 			readonly startedAt: string
 			readonly finishedAt: string
+			readonly model: string
 			readonly usage: Usage
+			readonly costUsd: number
 	  }
 	| { readonly type: 'error'; readonly agentId: string; readonly kind: string; readonly message: string }
+	| {
+			readonly type: 'alert'
+			readonly kind: 'cost' | 'tokens'
+			readonly threshold: number
+			readonly actual: number
+	  }
 	| { readonly type: 'run_finished'; readonly status: ResultStatus; readonly summary: string }
 
 export type RunEventSink = (event: RunEvent) => void

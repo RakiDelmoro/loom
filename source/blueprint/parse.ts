@@ -16,9 +16,19 @@
  * dozens of call sites must apply identically.
  */
 
-import { ValidationError } from '../errors.ts'
-import { isRecord } from '../guards.ts'
+import {
+	expectEnum,
+	expectNonEmptyString,
+	expectNonNegativeNumber,
+	expectNumber,
+	expectPositiveInteger,
+	expectRecord,
+	expectStringArray,
+	fail,
+	rejectUnknownKeys,
+} from '../validation.ts'
 import type {
+	Alerts,
 	BlueprintFile,
 	Budgets,
 	IsolationMode,
@@ -33,59 +43,15 @@ import type {
 const ISOLATION_MODES = ['worktree', 'shared'] as const
 const PERMISSION_MODES = ['read-only', 'workspace-write', 'full'] as const
 
-const BLUEPRINT_KEYS = ['entryRole', 'roles', 'tools', 'routing', 'budgets', 'permissions', 'visualization'] as const
+const BLUEPRINT_KEYS = ['entryRole', 'roles', 'tools', 'routing', 'budgets', 'alerts', 'permissions', 'visualization'] as const
 const ROLE_KEYS = ['prompt', 'model', 'tools', 'isolation', 'parallel', 'styleGuide', 'label', 'description', 'workingLabel'] as const
 const PARALLEL_KEYS = ['maxChildren'] as const
 const ROUTING_KEYS = ['provider', 'model', 'temperature', 'maxTokens'] as const
-const BUDGET_KEYS = ['maxAgentDepth', 'maxConcurrentAgents', 'maxCostUsd', 'maxTokensPerRun', 'toolTimeoutSeconds'] as const
+const BUDGET_KEYS = ['maxAgentDepth', 'maxConcurrentAgents', 'toolTimeoutSeconds'] as const
+const ALERT_KEYS = ['costUsd', 'tokens'] as const
 const PERMISSION_KEYS = ['mode', 'requireApproval'] as const
 const MANIFEST_KEYS = ['name', 'description', 'parameters'] as const
 const TIER_KEYS = ['detailed', 'friendly', 'whimsical'] as const
-
-/** Throws a path-carrying error. Declared `never` so it narrows at call sites. */
-function fail(path: string, message: string): never {
-	throw new ValidationError(path, message)
-}
-
-function expectRecord(value: unknown, path: string): Record<string, unknown> {
-	if (!isRecord(value)) fail(path, 'expected an object')
-	return value
-}
-
-function expectNonEmptyString(value: unknown, path: string): string {
-	if (typeof value !== 'string' || value === '') fail(path, 'expected a non-empty string')
-	return value
-}
-
-function expectNumber(value: unknown, path: string): number {
-	if (typeof value !== 'number' || !Number.isFinite(value)) fail(path, 'expected a finite number')
-	return value
-}
-
-function expectPositiveInteger(value: unknown, path: string): number {
-	if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) fail(path, 'expected a positive integer')
-	return value
-}
-
-function expectStringArray(value: unknown, path: string): string[] {
-	if (!Array.isArray(value)) fail(path, 'expected an array')
-	return value.map((item, index) => expectNonEmptyString(item, `${path}[${index}]`))
-}
-
-function expectEnum<T extends string>(value: unknown, allowed: readonly T[], path: string): T {
-	const expected = `expected one of ${allowed.join(', ')}`
-	if (typeof value !== 'string') fail(path, expected)
-	for (const option of allowed) {
-		if (value === option) return option
-	}
-	fail(path, expected)
-}
-
-function rejectUnknownKeys(record: Record<string, unknown>, allowed: readonly string[], path: string): void {
-	for (const key of Object.keys(record)) {
-		if (!allowed.includes(key)) fail(`${path}.${key}`, 'unknown key')
-	}
-}
 
 // --- object parsers ---------------------------------------------------------
 
@@ -143,14 +109,22 @@ function parseRoutingProfile(value: unknown, path: string): RoutingProfile {
 function parseBudgets(value: unknown, path: string): Budgets {
 	const record = expectRecord(value, path)
 	rejectUnknownKeys(record, BUDGET_KEYS, path)
-	const maxCostUsd = expectNumber(record['maxCostUsd'], `${path}.maxCostUsd`)
-	if (maxCostUsd < 0) fail(`${path}.maxCostUsd`, 'expected a number greater than or equal to zero')
 	return {
 		maxAgentDepth: expectPositiveInteger(record['maxAgentDepth'], `${path}.maxAgentDepth`),
 		maxConcurrentAgents: expectPositiveInteger(record['maxConcurrentAgents'], `${path}.maxConcurrentAgents`),
-		maxCostUsd,
-		maxTokensPerRun: expectPositiveInteger(record['maxTokensPerRun'], `${path}.maxTokensPerRun`),
 		toolTimeoutSeconds: expectPositiveInteger(record['toolTimeoutSeconds'], `${path}.toolTimeoutSeconds`),
+	}
+}
+
+/** Advisory thresholds: crossing one emits an event and never stops a run. */
+function parseAlerts(value: unknown, path: string): Alerts {
+	const record = expectRecord(value, path)
+	rejectUnknownKeys(record, ALERT_KEYS, path)
+	return {
+		...(record['costUsd'] !== undefined
+			? { costUsd: expectNonNegativeNumber(record['costUsd'], `${path}.costUsd`) }
+			: {}),
+		...(record['tokens'] !== undefined ? { tokens: expectPositiveInteger(record['tokens'], `${path}.tokens`) } : {}),
 	}
 }
 
@@ -192,6 +166,7 @@ export function parseBlueprintFile(value: unknown, path = 'blueprint'): Blueprin
 		toolPaths: expectStringArray(record['tools'], `${path}.tools`),
 		routing,
 		budgets: parseBudgets(record['budgets'], `${path}.budgets`),
+		alerts: record['alerts'] === undefined ? {} : parseAlerts(record['alerts'], `${path}.alerts`),
 		permissions: parsePermissions(record['permissions'], `${path}.permissions`),
 	}
 }

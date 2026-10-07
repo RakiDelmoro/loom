@@ -88,22 +88,23 @@ Milestones are sequential: the isolation primitive must exist before the engine 
 
 ---
 
-## M4 — Hybrid routing and cost budgets
+## M4 — Hybrid routing and spend accounting
 
-**Goal.** Cheap roles on local models, hard roles on cloud, with dollar accounting and hard budgets. See [model-routing.md](model-routing.md).
+**Goal.** Cheap roles on local models, hard roles on cloud, with dollar accounting that is **measured and reported but never enforced**. See [model-routing.md](model-routing.md).
 
 **Deliverables.**
 
-1. **Provider registry** — named providers with credentials from the deployment file/environment, never the Blueprint.
-2. **Cost accounting** — per-model prices; per-agent and per-run token and dollar totals.
-3. **Budget enforcement** — soft warning at a threshold, hard stop at `maxCostUsd`; a `budget_exceeded` error card that unwinds cleanly.
+1. **Provider registry** — named providers with endpoints and credentials from the deployment file/environment, never the Blueprint.
+2. **Cost accounting** — per-model prices; per-call, per-agent, and per-run token and dollar totals, with a per-model breakdown, recorded in the manifest.
+3. **Spend visibility, never enforcement** — an optional `alerts` threshold emits an event and nothing else. No run is stopped over money; `maxAgentDepth`, the per-role turn limit, the tool timeout, and the deployment container are what bound a runaway run.
 4. **Per-run overrides** — `--model-override role=profile`.
 
 **Acceptance criteria.**
 
-- [ ] Cost math is unit-tested (including cached/uncached input pricing).
-- [ ] A run crossing `maxCostUsd` halts with a typed error and no partial commit.
-- [ ] The manifest records which model served each role.
+- [x] Cost math is unit-tested (including cached/uncached input pricing).
+- [x] A run that crosses its alert threshold emits an event and **continues to completion**.
+- [x] The manifest records which model served each role, and what each cost.
+- [x] Credentials never appear in the Blueprint, the manifest, or the log.
 
 ---
 

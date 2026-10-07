@@ -1,4 +1,4 @@
-import type { LoadedBlueprint, LoadedRole, RoutingProfile } from '../blueprint/types.ts'
+import type { Alerts, LoadedBlueprint, LoadedRole, RoutingProfile } from '../blueprint/types.ts'
 
 const DEFAULT_PROFILE: RoutingProfile = { provider: 'test', model: 'test-model', temperature: 0 }
 
@@ -15,6 +15,7 @@ export interface TestBlueprintOptions {
 	readonly maxConcurrentAgents?: number
 	/** Defaults to every tool named by any role. */
 	readonly toolNames?: readonly string[]
+	readonly alerts?: Alerts
 }
 
 /** A loaded Blueprint built in memory, so scheduler tests need no files at all. */
@@ -49,10 +50,9 @@ export function createTestBlueprint(
 		budgets: {
 			maxAgentDepth: options.maxAgentDepth ?? 4,
 			maxConcurrentAgents: options.maxConcurrentAgents ?? 4,
-			maxCostUsd: 1,
-			maxTokensPerRun: 100_000,
 			toolTimeoutSeconds: 30,
 		},
+		alerts: options.alerts ?? {},
 		permissions: { mode: 'workspace-write', requireApproval: [] },
 	}
 }

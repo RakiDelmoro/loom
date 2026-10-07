@@ -23,7 +23,7 @@ loom tune --cycles N [--blueprint <file>]      # run the tuner loop
 | Flag | Default | Meaning |
 |---|---|---|
 | `--repo <path>` | cwd | The base repository. |
-| `--blueprint <file>` | `blueprint.json` | The Blueprint to run. |
+| `--blueprint <file>` | `loom.json` | The Blueprint to run. |
 | `--task <text>` | required | The task. |
 | `--agents <n>` | Blueprint default | Shorthand for `budgets.maxConcurrentAgents`. |
 | `--effort <tier>` | `standard` | `quick` \| `standard` \| `thorough`, injected into the entry role. |

@@ -41,7 +41,9 @@ const finishEvent: RunEvent = {
 	sha: 'def456',
 	startedAt: '2026-10-07T14:22:35.000Z',
 	finishedAt: '2026-10-07T14:26:10.000Z',
+	model: 'test-model',
 	usage: { inputTokens: 10, cachedInputTokens: 4, outputTokens: 2 },
+	costUsd: 0.5,
 }
 
 function createRecorder() {
@@ -91,21 +93,34 @@ describe('createRunRecorder', () => {
 				sha: 'def456',
 				startedAt: '2026-10-07T14:22:35.000Z',
 				finishedAt: '2026-10-07T14:26:10.000Z',
+				model: 'test-model',
 				usage: { inputTokens: 10, cachedInputTokens: 4, outputTokens: 2 },
+				costUsd: 0.5,
 			},
 		])
 		// The manifest stays `running` until the run itself finishes.
 		expect(latest?.status).toBe('running')
 	})
 
-	test('the run total is the sum of its agents', () => {
+	test('the run total is the sum of its agents, broken down by model', () => {
 		const { recorder } = createRecorder()
 		recorder.begin()
 		recorder.events(finishEvent)
-		recorder.events({ ...finishEvent, agentId: 'worker-1-3', usage: { inputTokens: 5, cachedInputTokens: 1, outputTokens: 1 } })
+		recorder.events({
+			...finishEvent,
+			agentId: 'worker-1-3',
+			model: 'other-model',
+			usage: { inputTokens: 5, cachedInputTokens: 1, outputTokens: 1 },
+			costUsd: 0.25,
+		})
 
 		const manifest = recorder.finish(result)
 		expect(manifest.usage).toEqual({ inputTokens: 15, cachedInputTokens: 5, outputTokens: 3 })
+		expect(manifest.costUsd).toBeCloseTo(0.75, 10)
+		expect(manifest.models).toEqual([
+			{ model: 'other-model', usage: { inputTokens: 5, cachedInputTokens: 1, outputTokens: 1 }, costUsd: 0.25 },
+			{ model: 'test-model', usage: { inputTokens: 10, cachedInputTokens: 4, outputTokens: 2 }, costUsd: 0.5 },
+		])
 	})
 
 	test('events other than an agent finishing are logged but do not change the manifest', () => {

@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import * as path from 'node:path'
 import { createNodeFileSystem } from '../node-fs.ts'
-import { runTask } from '../run-task.ts'
+import { runTask, type RunTaskOptions } from '../run-task.ts'
+import type { AutonomyLevel } from './types.ts'
 import { delay } from '../test-support/clock.ts'
 import { createTemporaryRepository, gitOutput } from '../test-support/git-repository.ts'
 import { createGitRunner } from '../workspace/git.ts'
@@ -15,13 +16,14 @@ import { createRunStore } from './store.ts'
  *
  * Opt-in — `bun run test:git` sets LOOM_GIT_TESTS. This is the end-to-end proof
  * that a run leaves a manifest, a log, and a branch that agree with each other,
- * and that merge, undo, and clean do what they claim.
+ * that merge, undo, and clean do what they claim, and that cost is recorded
+ * without ever stopping the run.
  */
 const enabled = process.env['LOOM_GIT_TESTS'] === '1'
 const suite = enabled ? describe : describe.skip
 
-/** A repository whose base commit already contains the Blueprint. */
-function createRepositoryWithBlueprint(): string {
+/** A repository whose base commit already contains the Blueprint and deployment. */
+function createRepositoryWithBlueprint(modelBaseUrl: string): string {
 	const repo = createTemporaryRepository()
 
 	mkdirSync(path.join(repo, 'tools'), { recursive: true })
@@ -37,15 +39,19 @@ function createRepositoryWithBlueprint(): string {
 			entryRole: 'orchestrator',
 			roles: { orchestrator: { prompt: 'prompts/orchestrator.md', model: 'default', tools: ['write_file'] } },
 			tools: ['tools/write_file.json'],
-			routing: { default: { provider: 'local', model: 'test-model', temperature: 0 } },
-			budgets: {
-				maxAgentDepth: 2,
-				maxConcurrentAgents: 2,
-				maxCostUsd: 1,
-				maxTokensPerRun: 10_000,
-				toolTimeoutSeconds: 30,
-			},
+			routing: { default: { provider: 'stub', model: 'test-model', temperature: 0 } },
+			budgets: { maxAgentDepth: 2, maxConcurrentAgents: 2, toolTimeoutSeconds: 30 },
+			// A deliberately tiny threshold, so the alert fires on any real spend.
+			alerts: { costUsd: 0.01 },
 			permissions: { mode: 'workspace-write', requireApproval: [] },
+		}),
+	)
+	writeFileSync(
+		path.join(repo, 'loom.deployment.json'),
+		JSON.stringify({
+			providers: { stub: { baseUrl: modelBaseUrl } },
+			// $1 per million prompt tokens, $2 per million completion tokens.
+			prices: { 'test-model': { inputPer1M: 1000, cachedInputPer1M: 0, outputPer1M: 2000 } },
 		}),
 	)
 
@@ -63,8 +69,19 @@ function createStubModel() {
 			calls += 1
 			const toolCall =
 				calls === 1
-					? { id: 'c1', type: 'function', function: { name: 'write_file', arguments: JSON.stringify({ path: 'output.txt', content: 'hello world\n' }) } }
-					: { id: 'c2', type: 'function', function: { name: 'finish', arguments: JSON.stringify({ status: 'success', summary: 'wrote output.txt' }) } }
+					? {
+							id: 'c1',
+							type: 'function',
+							function: {
+								name: 'write_file',
+								arguments: JSON.stringify({ path: 'output.txt', content: 'hello world\n' }),
+							},
+						}
+					: {
+							id: 'c2',
+							type: 'function',
+							function: { name: 'finish', arguments: JSON.stringify({ status: 'success', summary: 'wrote output.txt' }) },
+						}
 
 			return Response.json({
 				choices: [{ message: { role: 'assistant', content: '', tool_calls: [toolCall] }, finish_reason: 'tool_calls' }],
@@ -73,6 +90,19 @@ function createStubModel() {
 		},
 	})
 	return { server, baseUrl: `http://localhost:${String(server.port)}/v1` }
+}
+
+function runOptions(repo: string, task: string, autonomy: AutonomyLevel): RunTaskOptions {
+	return {
+		repoPath: repo,
+		blueprintPath: path.join(repo, 'loom.json'),
+		deploymentPath: path.join(repo, 'loom.deployment.json'),
+		task,
+		autonomy,
+		modelOverrides: {},
+		env: {},
+		fetch: (url, init) => fetch(url, init),
+	}
 }
 
 suite('the run lifecycle against real git', () => {
@@ -84,18 +114,14 @@ suite('the run lifecycle against real git', () => {
 	})
 
 	test('a run leaves a manifest, a log, and a branch that agree with each other', async () => {
-		const repo = createRepositoryWithBlueprint()
-		cleanupPath = repo
 		const stub = createStubModel()
+		const repo = createRepositoryWithBlueprint(stub.baseUrl)
+		cleanupPath = repo
 
 		try {
-			const outcome = await runTask({
-				repoPath: repo,
-				blueprintPath: path.join(repo, 'loom.json'),
-				task: 'write output.txt',
-				autonomy: 'supervised',
-				apiBase: stub.baseUrl,
-			})
+			const outcome = await runTask(
+				runOptions(repo, 'write output.txt', 'supervised'),
+			)
 
 			expect(outcome.status).toBe('success')
 			expect(outcome.merged).toEqual([])
@@ -115,10 +141,22 @@ suite('the run lifecycle against real git', () => {
 			expect(agent.role).toBe('orchestrator')
 			expect(agent.sha).not.toBeNull()
 
-			// The event log exists alongside it.
+			// The model that served the role is recorded, and its cost is real:
+			// two calls at 10 prompt / 5 completion tokens each.
+			expect(agent.model).toBe('test-model')
+			expect(manifest.usage).toEqual({ inputTokens: 20, cachedInputTokens: 0, outputTokens: 10 })
+			expect(manifest.costUsd).toBeCloseTo(0.04, 10)
+			expect(manifest.models).toEqual([
+				{ model: 'test-model', usage: { inputTokens: 20, cachedInputTokens: 0, outputTokens: 10 }, costUsd: 0.04 },
+			])
+
+			// The event log exists alongside it — and the alert fired without
+			// stopping anything.
 			const logPath = path.join(repo, '.loom', 'runs', outcome.manifest.runId, 'events.jsonl')
 			expect(existsSync(logPath)).toBe(true)
-			expect(readFileSync(logPath, 'utf8')).toContain('"type":"run_finished"')
+			const log = readFileSync(logPath, 'utf8')
+			expect(log).toContain('"type":"alert"')
+			expect(log).toContain('"type":"run_finished"')
 
 			const git = createGitRunner({ cwd: repo })
 			const worktrees = createWorktreeManager({ git, fs }, { repoPath: repo })
@@ -156,18 +194,12 @@ suite('the run lifecycle against real git', () => {
 	})
 
 	test('auto autonomy merges the run\u2019s branches without the operator', async () => {
-		const repo = createRepositoryWithBlueprint()
-		cleanupPath = repo
 		const stub = createStubModel()
+		const repo = createRepositoryWithBlueprint(stub.baseUrl)
+		cleanupPath = repo
 
 		try {
-			const outcome = await runTask({
-				repoPath: repo,
-				blueprintPath: path.join(repo, 'loom.json'),
-				task: 'write output.txt',
-				autonomy: 'auto',
-				apiBase: stub.baseUrl,
-			})
+			const outcome = await runTask(runOptions(repo, 'write output.txt', 'auto'))
 
 			expect(outcome.status).toBe('success')
 			expect(outcome.merged).toHaveLength(1)
@@ -178,17 +210,32 @@ suite('the run lifecycle against real git', () => {
 		}
 	})
 
-	test('a model endpoint that cannot be reached fails the run without leaving a worktree', async () => {
-		const repo = createRepositoryWithBlueprint()
+	test('a run is refused when the deployment file does not price its models', async () => {
+		const stub = createStubModel()
+		const repo = createRepositoryWithBlueprint(stub.baseUrl)
 		cleanupPath = repo
 
-		const outcome = await runTask({
-			repoPath: repo,
-			blueprintPath: path.join(repo, 'loom.json'),
-			task: 'write output.txt',
-			autonomy: 'auto',
-			apiBase: 'http://127.0.0.1:1/v1',
-		})
+		try {
+			// A price-less deployment: the run must fail loudly rather than
+			// silently report a cost of zero.
+			writeFileSync(
+				path.join(repo, 'loom.deployment.json'),
+				JSON.stringify({ providers: { stub: { baseUrl: stub.baseUrl } }, prices: {} }),
+			)
+
+			await expect(runTask(runOptions(repo, 'write output.txt', 'supervised'))).rejects.toThrow(
+				/no price for: test-model/,
+			)
+		} finally {
+			stub.server.stop(true)
+		}
+	})
+
+	test('a model endpoint that cannot be reached fails the run without leaving a worktree', async () => {
+		const repo = createRepositoryWithBlueprint('http://127.0.0.1:1/v1')
+		cleanupPath = repo
+
+		const outcome = await runTask(runOptions(repo, 'write output.txt', 'auto'))
 
 		expect(outcome.status).toBe('error')
 		expect(outcome.merged).toEqual([])
@@ -210,19 +257,52 @@ suite('the run lifecycle against real git', () => {
 		expect(gitOutput(repo, ['worktree', 'list', '--porcelain'])).not.toContain('.loom/worktrees')
 	})
 
-	test('a run killed mid-flight leaves a recoverable state, not a leaked worktree', async () => {
-		const repo = createRepositoryWithBlueprint()
+	test('a credential never reaches the manifest, the log, or the workspace', async () => {
+		const stub = createStubModel()
+		const repo = createRepositoryWithBlueprint(stub.baseUrl)
 		cleanupPath = repo
 
+		try {
+			// The deployment file names the variable; only the environment holds the
+			// value. A leaked deployment file therefore leaks nothing.
+			writeFileSync(
+				path.join(repo, 'loom.deployment.json'),
+				JSON.stringify({
+					providers: { stub: { baseUrl: stub.baseUrl, apiKeyEnv: 'STUB_KEY' } },
+					prices: { 'test-model': { inputPer1M: 1000, cachedInputPer1M: 0, outputPer1M: 2000 } },
+				}),
+			)
+
+			const outcome = await runTask({
+				...runOptions(repo, 'write output.txt', 'supervised'),
+				env: { STUB_KEY: 'super-secret-value' },
+			})
+			expect(outcome.status).toBe('success')
+
+			// Nothing Loom wrote carries the secret — not the manifest, not the log.
+			const runDirectory = path.join(repo, '.loom', 'runs', outcome.manifest.runId)
+			const written = readdirSync(runDirectory)
+			expect(written.length).toBeGreaterThan(0)
+			for (const file of written) {
+				expect(readFileSync(path.join(runDirectory, file), 'utf8')).not.toContain('super-secret-value')
+			}
+		} finally {
+			stub.server.stop(true)
+		}
+	})
+
+	test('a run killed mid-flight leaves a recoverable state, not a leaked worktree', async () => {
 		// An endpoint that accepts the connection and never answers, so the run
 		// blocks inside its first model call — after its worktree exists.
 		const hanging = Bun.serve({ port: 0, fetch: () => new Promise<Response>(() => {}) })
+		const repo = createRepositoryWithBlueprint(`http://localhost:${String(hanging.port)}/v1`)
+		cleanupPath = repo
 
 		const cliPath = path.join(import.meta.dir, '..', 'cli.ts')
-		const proc = Bun.spawn(
-			['bun', cliPath, 'run', '--repo', repo, '--task', 'write output.txt', '--api-base', `http://localhost:${String(hanging.port)}/v1`],
-			{ stdout: 'pipe', stderr: 'pipe' },
-		)
+		const proc = Bun.spawn(['bun', cliPath, 'run', '--repo', repo, '--task', 'write output.txt'], {
+			stdout: 'pipe',
+			stderr: 'pipe',
+		})
 
 		try {
 			// Wait until git has actually registered the worktree, not merely until
@@ -245,7 +325,9 @@ suite('the run lifecycle against real git', () => {
 
 			// The record is truthful about a run that never finished.
 			expect(store.readManifest(runId)?.status).toBe('running')
-			expect(readFileSync(path.join(repo, '.loom', 'runs', runId, 'events.jsonl'), 'utf8')).toContain('"type":"run_started"')
+			expect(readFileSync(path.join(repo, '.loom', 'runs', runId, 'events.jsonl'), 'utf8')).toContain(
+				'"type":"run_started"',
+			)
 
 			// And the state it left behind is cleanable, not leaked.
 			const git = createGitRunner({ cwd: repo })

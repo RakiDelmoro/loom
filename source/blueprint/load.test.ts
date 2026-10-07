@@ -32,7 +32,7 @@ const blueprintDocument = {
 		reasoner: { provider: 'anthropic', model: 'claude-sonnet-4', temperature: 0.2 },
 		worker: { provider: 'local', model: 'qwen3-coder-30b', temperature: 0.1 },
 	},
-	budgets: { maxAgentDepth: 6, maxConcurrentAgents: 8, maxCostUsd: 5, maxTokensPerRun: 2000000, toolTimeoutSeconds: 60 },
+	budgets: { maxAgentDepth: 6, maxConcurrentAgents: 8, toolTimeoutSeconds: 60 },
 	permissions: { mode: 'workspace-write', requireApproval: [] },
 }
 

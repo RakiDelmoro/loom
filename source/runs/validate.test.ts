@@ -23,10 +23,14 @@ const valid: RunManifest = {
 			sha: 'def456',
 			startedAt: '2026-10-07T14:22:35.000Z',
 			finishedAt: '2026-10-07T14:26:10.000Z',
+			model: 'qwen3-coder-30b',
 			usage: { inputTokens: 10, cachedInputTokens: 4, outputTokens: 2 },
+			costUsd: 0.5,
 		},
 	],
 	usage: { inputTokens: 10, cachedInputTokens: 4, outputTokens: 2 },
+	costUsd: 0.5,
+	models: [{ model: 'qwen3-coder-30b', usage: { inputTokens: 10, cachedInputTokens: 4, outputTokens: 2 }, costUsd: 0.5 }],
 }
 
 describe('parseRunManifest', () => {

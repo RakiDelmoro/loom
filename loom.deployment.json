@@ -1,0 +1,16 @@
+{
+	"providers": {
+		"local": {
+			"baseUrl": "http://localhost:8080/v1"
+		},
+		"anthropic": {
+			"baseUrl": "https://api.anthropic.com/v1",
+			"apiKeyEnv": "ANTHROPIC_API_KEY"
+		}
+	},
+
+	"prices": {
+		"qwen3-coder-30b": { "inputPer1M": 0, "cachedInputPer1M": 0, "outputPer1M": 0 },
+		"claude-sonnet-4": { "inputPer1M": 3, "cachedInputPer1M": 0.3, "outputPer1M": 15 }
+	}
+}

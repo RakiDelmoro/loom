@@ -1,10 +1,12 @@
 import { describe, expect, test } from 'bun:test'
 import type { LoadedBlueprint } from '../blueprint/types.ts'
+import type { ModelPrice } from '../deployment/types.ts'
 import { createFakeProvider } from '../model/fake.ts'
 import type { ChatRequest, Provider } from '../model/types.ts'
 import { createTestBlueprint } from '../test-support/blueprint.ts'
 import { createBarrier, createCounterClock, delay } from '../test-support/clock.ts'
 import { call, textResponse, toolCallResponse } from '../test-support/model.ts'
+import { createFakeRegistry } from '../test-support/providers.ts'
 import { createFakeWorktrees, type FakeWorktrees } from '../test-support/worktrees.ts'
 import { createToolRegistry } from '../tools/registry.ts'
 import type { ToolRegistry } from '../tools/types.ts'
@@ -23,18 +25,24 @@ function createRun(options: {
 	readonly worktrees?: FakeWorktrees
 	readonly tools?: ToolRegistry
 	readonly now?: () => number
+	readonly prices?: Readonly<Record<string, ModelPrice>>
+	readonly modelOverrides?: Readonly<Record<string, string>>
 }): RunHarness {
 	const events: RunEvent[] = []
 	const scheduler = createScheduler(
 		{
-			provider: options.provider,
+			providers: createFakeRegistry(options.provider),
 			tools: options.tools ?? createToolRegistry([]),
 			worktrees: options.worktrees ?? createFakeWorktrees(),
 			blueprint: options.blueprint,
 			now: options.now ?? createCounterClock(),
 			events: (event) => events.push(event),
 		},
-		{ repoPath: '/repo' },
+		{
+			repoPath: '/repo',
+			prices: options.prices ?? {},
+			modelOverrides: options.modelOverrides ?? {},
+		},
 	)
 	return { run: (request) => scheduler.run(request), events }
 }
@@ -43,6 +51,10 @@ function createRun(options: {
 function systemOf(request: ChatRequest): string {
 	return request.messages[0]?.content ?? ''
 }
+
+// $3 per million prompt tokens, $15 per million completion tokens.
+const PRICE: ModelPrice = { inputPer1M: 3, cachedInputPer1M: 0.3, outputPer1M: 15 }
+const EXPENSIVE_USAGE = { inputTokens: 1_000_000, cachedInputTokens: 0, outputTokens: 1_000_000 }
 
 function sawToolResult(request: ChatRequest): boolean {
 	return request.messages.some((message) => message.role === 'tool')
@@ -228,5 +240,114 @@ describe('createScheduler', () => {
 
 		expect(result.card).toEqual({ status: 'success', summary: 'recovered' })
 		expect(second?.messages.find((message) => message.role === 'tool')?.content).toContain('tool exploded')
+	})
+
+	test('records which model served each agent, and what it cost', async () => {
+		const blueprint = createTestBlueprint({ orchestrator: { tools: [], isolation: 'shared' } })
+		const harness = createRun({
+			blueprint,
+			provider: createFakeProvider([textResponse('done', EXPENSIVE_USAGE)]),
+			prices: { 'test-model': PRICE },
+		})
+
+		await harness.run({ runId: 'run-1', task: 'go' })
+
+		const finish = harness.events.find((event) => event.type === 'agent_finish')
+		if (finish?.type !== 'agent_finish') throw new Error('no agent finished')
+		expect(finish.model).toBe('test-model')
+		expect(finish.costUsd).toBeCloseTo(18, 10)
+	})
+
+	test('crossing an alert threshold emits an event and lets the run finish', async () => {
+		const blueprint = createTestBlueprint(
+			{ orchestrator: { tools: [], isolation: 'shared' } },
+			{ alerts: { costUsd: 1 } },
+		)
+		const harness = createRun({
+			blueprint,
+			provider: createFakeProvider([textResponse('done', EXPENSIVE_USAGE)]),
+			prices: { 'test-model': PRICE },
+		})
+
+		const result = await harness.run({ runId: 'run-1', task: 'go' })
+
+		// The run finished: an alert is a signal to look, never a stop.
+		expect(result.card.status).toBe('success')
+
+		const alert = harness.events.find((event) => event.type === 'alert')
+		if (alert?.type !== 'alert') throw new Error('no alert fired')
+		expect(alert.kind).toBe('cost')
+		expect(alert.threshold).toBe(1)
+		expect(alert.actual).toBeCloseTo(18, 10)
+	})
+
+	test('an alert fires once, however many agents cross it', async () => {
+		const blueprint = createTestBlueprint(
+			{
+				orchestrator: { tools: ['agent'], maxChildren: 2, isolation: 'shared' },
+				worker: { tools: [], isolation: 'shared' },
+			},
+			{ alerts: { costUsd: 1 } },
+		)
+		const provider = createFakeProvider((request) => {
+			if (systemOf(request).includes('worker')) return textResponse('worker done', EXPENSIVE_USAGE)
+			if (!sawToolResult(request)) {
+				return toolCallResponse(
+					[call('a', 'agent', { role: 'worker', task: 'x' }), call('b', 'agent', { role: 'worker', task: 'y' })],
+					EXPENSIVE_USAGE,
+				)
+			}
+			return textResponse('all done', EXPENSIVE_USAGE)
+		})
+
+		const harness = createRun({ blueprint, provider, prices: { 'test-model': PRICE } })
+		await harness.run({ runId: 'run-1', task: 'go' })
+
+		// Three agents, each far past the threshold — but one alert.
+		expect(harness.events.filter((event) => event.type === 'alert')).toHaveLength(1)
+	})
+
+	test('a token alert fires on the run total', async () => {
+		const blueprint = createTestBlueprint(
+			{ orchestrator: { tools: [], isolation: 'shared' } },
+			{ alerts: { tokens: 100 } },
+		)
+		const harness = createRun({
+			blueprint,
+			provider: createFakeProvider([textResponse('done', EXPENSIVE_USAGE)]),
+			prices: { 'test-model': PRICE },
+		})
+
+		await harness.run({ runId: 'run-1', task: 'go' })
+
+		const alert = harness.events.find((event) => event.type === 'alert')
+		if (alert?.type !== 'alert') throw new Error('no alert fired')
+		expect(alert.kind).toBe('tokens')
+	})
+
+	test('a run with no alerts declared never emits one', async () => {
+		const blueprint = createTestBlueprint({ orchestrator: { tools: [], isolation: 'shared' } })
+		const harness = createRun({
+			blueprint,
+			provider: createFakeProvider([textResponse('done', EXPENSIVE_USAGE)]),
+			prices: { 'test-model': PRICE },
+		})
+
+		await harness.run({ runId: 'run-1', task: 'go' })
+		expect(harness.events.some((event) => event.type === 'alert')).toBe(false)
+	})
+
+	test('a model with no price in the map costs zero rather than crashing', async () => {
+		const blueprint = createTestBlueprint({ orchestrator: { tools: [], isolation: 'shared' } })
+		const harness = createRun({
+			blueprint,
+			provider: createFakeProvider([textResponse('done', EXPENSIVE_USAGE)]),
+		})
+
+		await harness.run({ runId: 'run-1', task: 'go' })
+
+		const finish = harness.events.find((event) => event.type === 'agent_finish')
+		if (finish?.type !== 'agent_finish') throw new Error('no agent finished')
+		expect(finish.costUsd).toBe(0)
 	})
 })

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { parseArguments } from './cli-args.ts'
+import { parseArguments, parseModelOverrides } from './cli-args.ts'
 
 describe('parseArguments', () => {
 	test('collects positionals', () => {
@@ -32,5 +32,44 @@ describe('parseArguments', () => {
 
 	test('keeps the values of repeated flags last-wins', () => {
 		expect(parseArguments(['--repo', '/a', '--repo', '/b'], []).flags['repo']).toBe('/b')
+	})
+
+	test('collects a declared repeatable flag into a list, in order', () => {
+		const parsed = parseArguments(['--model-override', 'a=b', '--model-override', 'c=d'], [], ['model-override'])
+		expect(parsed.repeated['model-override']).toEqual(['a=b', 'c=d'])
+	})
+
+	test('records an empty entry for a repeatable flag with no value', () => {
+		expect(parseArguments(['--model-override'], [], ['model-override']).repeated['model-override']).toEqual([''])
+	})
+
+	test('leaves the repeated map empty when nothing repeats', () => {
+		expect(parseArguments(['run'], [], ['model-override']).repeated).toEqual({})
+	})
+})
+
+describe('parseModelOverrides', () => {
+	test('parses role=profile pairs', () => {
+		expect(parseModelOverrides(['coder=reasoner', 'planner=worker'])).toEqual({
+			kind: 'ok',
+			value: { coder: 'reasoner', planner: 'worker' },
+		})
+	})
+
+	test('rejects a pair with no separator', () => {
+		expect(parseModelOverrides(['coder']).kind).toBe('failed')
+	})
+
+	test('rejects a pair with an empty side', () => {
+		expect(parseModelOverrides(['=reasoner']).kind).toBe('failed')
+		expect(parseModelOverrides(['coder=']).kind).toBe('failed')
+	})
+
+	test('a profile name may itself contain an equals sign', () => {
+		expect(parseModelOverrides(['coder=a=b'])).toEqual({ kind: 'ok', value: { coder: 'a=b' } })
+	})
+
+	test('an empty list yields an empty override map', () => {
+		expect(parseModelOverrides([])).toEqual({ kind: 'ok', value: {} })
 	})
 })

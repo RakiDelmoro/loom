@@ -10,7 +10,7 @@
 import * as path from 'node:path'
 import pkg from '../package.json'
 import { loadBlueprint } from './blueprint/load.ts'
-import { parseArguments, type ParsedArguments } from './cli-args.ts'
+import { parseArguments, parseModelOverrides, type ParsedArguments } from './cli-args.ts'
 import { ValidationError } from './errors.ts'
 import { createNodeFileSystem } from './node-fs.ts'
 import { runTask } from './run-task.ts'
@@ -23,6 +23,7 @@ import { createWorktreeManager } from './workspace/worktree.ts'
 const VERSION: string = pkg.version
 const fileSystem = createNodeFileSystem()
 const BOOLEAN_SWITCHES = ['branches'] as const
+const REPEATED_FLAGS = ['model-override'] as const
 
 const USAGE = `loom — a git-native, concurrent, provider-agnostic multi-agent engine
 
@@ -30,7 +31,8 @@ Usage:
   loom --version
   loom --help
   loom blueprint validate <file>
-  loom run --task <text> [--repo <path>] [--blueprint <file>] [--autonomy <level>]
+  loom run --task <text> [--repo <path>] [--blueprint <file>] [--deployment <file>]
+           [--autonomy <level>] [--model-override <role=profile>]
   loom runs [--repo <path>]
   loom status <runId> [--repo <path>]
   loom diff   <runId> [--agent <id>] [--repo <path>]
@@ -42,15 +44,17 @@ Commands:
   blueprint validate   Validate a Blueprint and every tool manifest it names.
   run                  Run a task and write its record under .loom/runs/<runId>/.
   runs                 List the runs recorded in a repository.
-  status               Show a run's manifest: agents, branches, commits, tokens.
+  status               Show a run's manifest: agents, branches, commits, tokens, cost.
   diff                 Show what a run changed — every agent, or one with --agent.
   merge                Apply one agent's branch to the base branch.
   undo                 Return the base branch to the commit the run started from.
   clean                Remove a run's worktrees, and its branches with --branches.
 
-Environment:
-  LOOM_API_BASE        Model endpoint, e.g. http://localhost:8080/v1
-  LOOM_API_KEY         Model API key, when the endpoint needs one
+Files:
+  loom.json            The Blueprint: roles, tools, routing, budgets, alerts.
+  loom.deployment.json Providers, endpoints, and model prices. Credentials are
+                       named by "apiKeyEnv" and read from the environment — a
+                       deployment file never holds a key.
 `
 
 function openRepository(repoPath: string) {
@@ -80,6 +84,7 @@ function formatManifest(manifest: RunManifest): string {
 		`started:  ${manifest.startedAt}`,
 		`finished: ${manifest.finishedAt ?? '-'}`,
 		`tokens:   ${String(manifest.usage.inputTokens)} in / ${String(manifest.usage.outputTokens)} out`,
+		`cost:     $${manifest.costUsd.toFixed(4)}`,
 		'agents:',
 	]
 	if (manifest.agents.length === 0) lines.push('  (none)')
@@ -87,6 +92,14 @@ function formatManifest(manifest: RunManifest): string {
 		lines.push(
 			`  ${agent.agentId.padEnd(24)} ${agent.role.padEnd(14)} ${agent.status.padEnd(20)} ${agent.branch ?? '-'} ${agent.sha ?? '-'}`,
 		)
+	}
+	if (manifest.models.length > 0) {
+		lines.push('models:')
+		for (const entry of manifest.models) {
+			lines.push(
+				`  ${entry.model.padEnd(24)} ${String(entry.usage.inputTokens)} in / ${String(entry.usage.outputTokens)} out  $${entry.costUsd.toFixed(4)}`,
+			)
+		}
 	}
 	return `${lines.join('\n')}\n`
 }
@@ -117,6 +130,10 @@ function parseAutonomy(value: string): AutonomyLevel | null {
 	return null
 }
 
+function resolveFileFlag(value: string | undefined, repoPath: string, fallbackName: string): string {
+	return value === undefined || value === '' ? path.join(repoPath, fallbackName) : value
+}
+
 async function runCommand(args: ParsedArguments): Promise<number> {
 	const repoPath = resolveRepoPath(args)
 	const task = args.flags['task']
@@ -125,18 +142,25 @@ async function runCommand(args: ParsedArguments): Promise<number> {
 	const autonomy = parseAutonomy(args.flags['autonomy'] ?? 'auto')
 	if (autonomy === null) return fail('loom run: --autonomy must be auto, supervised, or manual')
 
-	const blueprintFlag = args.flags['blueprint']
-	const apiKey = args.flags['api-key'] ?? process.env['LOOM_API_KEY']
+	const overrides = parseModelOverrides(args.repeated['model-override'] ?? [])
+	if (overrides.kind !== 'ok') return fail(`loom run: ${overrides.message}`)
 
 	const outcome = await runTask({
 		repoPath,
-		blueprintPath: blueprintFlag === undefined || blueprintFlag === '' ? path.join(repoPath, 'loom.json') : blueprintFlag,
+		blueprintPath: resolveFileFlag(args.flags['blueprint'], repoPath, 'loom.json'),
+		deploymentPath: resolveFileFlag(args.flags['deployment'], repoPath, 'loom.deployment.json'),
 		task,
 		autonomy,
-		apiBase: args.flags['api-base'] ?? process.env['LOOM_API_BASE'] ?? 'http://localhost:8080/v1',
-		...(apiKey !== undefined && apiKey !== '' ? { apiKey } : {}),
+		modelOverrides: overrides.value,
+		env: process.env,
+		fetch: (url, init) => fetch(url, init),
 		events: (event) => {
 			if (event.type === 'agent_start') process.stderr.write(`  ${event.agentId} started\n`)
+			if (event.type === 'alert') {
+				process.stderr.write(
+					`  alert: ${event.kind} reached ${String(event.actual)} (threshold ${String(event.threshold)}) — continuing\n`,
+				)
+			}
 		},
 	})
 
@@ -257,7 +281,7 @@ async function main(argv: readonly string[]): Promise<number> {
 		return 0
 	}
 
-	const args = parseArguments(argv.slice(1), BOOLEAN_SWITCHES)
+	const args = parseArguments(argv.slice(1), BOOLEAN_SWITCHES, REPEATED_FLAGS)
 
 	switch (command) {
 		case 'blueprint':
@@ -283,4 +307,14 @@ async function main(argv: readonly string[]): Promise<number> {
 	}
 }
 
-process.exit(await main(process.argv.slice(2)))
+// The CLI boundary: a configuration error is a message and an exit code, not a
+// stack trace. Anything else is a bug, and is left to surface as one.
+try {
+	process.exit(await main(process.argv.slice(2)))
+} catch (error) {
+	if (error instanceof ValidationError) {
+		process.stderr.write(`loom: ${error.message}\n`)
+		process.exit(1)
+	}
+	throw error
+}

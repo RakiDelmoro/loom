@@ -72,7 +72,7 @@ Nothing is inferred from prose. The manifest and the event log are the record.
 
 - **Concurrent DAG, not a depth-first tree.** Fan-out/fan-in with a bounded pool; stable result ordering.
 - **Single-flight per worktree.** A worktree has exactly one owner at a time, enforced structurally. This is what makes concurrency safe — the reference implementation is sequential *because* it shares one working tree.
-- **Bounded depth and cost.** `maxAgentDepth` and `maxCostUsd` are hard guards.
+- **Bounded depth.** `maxAgentDepth` bounds recursion, and each role has a turn limit. Spend is measured but never enforced — see [model-routing.md](model-routing.md) "Spend visibility, not enforcement".
 - **Determinism.** Given the same Blueprint, base ref, and scripted provider, a run produces the same manifest — except for timestamps and commit shas.
 
 Details, edge cases, and the merge model: [isolation.md](isolation.md).
@@ -83,8 +83,8 @@ Details, edge cases, and the merge model: [isolation.md](isolation.md).
 
 Behavior and deployment are separate files, deliberately:
 
-- **Blueprint** (`blueprint.json`) — roles, prompts, tools, routing *profile names*, budgets, permissions. Pure behavior. This is what the Tuner rewrites.
-- **Deployment** (`deployment.json`) — provider endpoints, credentials, model ids, prices. Operator-set, environment-overridable, never touched by the Tuner.
+- **Blueprint** (`loom.json`) — roles, prompts, tools, routing *profile names*, budgets, permissions. Pure behavior. This is what the Tuner rewrites.
+- **Deployment** (`loom.deployment.json`) — provider endpoints, credentials, model ids, prices. Operator-set, environment-overridable, never touched by the Tuner.
 
 The Tuner must never be able to leak a credential into the artifact it optimizes, and a run must be reproducible across deployments.
 
@@ -109,7 +109,7 @@ Details: [blueprint-format.md](blueprint-format.md), [model-routing.md](model-ro
 
 ## 7. Failure philosophy
 
-Every failure is a **typed result** the caller can act on, never an exception that unwinds the process: `timeout`, `unavailable`, `invalid_arguments`, `permission_denied`, `budget_exceeded`, `depth_exceeded`, `context_overflow`. Recovery policy lives in the **Blueprint** (a recovery role, a retry instruction), not in the engine — the engine stays domain-blind.
+Every failure is a **typed result** the caller can act on, never an exception that unwinds the process: `timeout`, `unavailable`, `invalid_arguments`, `permission_denied`, `depth_exceeded`, `context_overflow`. Recovery policy lives in the **Blueprint** (a recovery role, a retry instruction), not in the engine — the engine stays domain-blind.
 
 A run never dies because one agent failed. A service crash never loses committed work, because work is committed to git as it completes.
 

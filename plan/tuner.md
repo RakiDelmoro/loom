@@ -38,7 +38,7 @@ A hypothesis is a concrete, testable change:
   "predictedImpact": "+10% pass rate on bugfix tasks",
   "changes": [
     { "path": "prompts/coder.md", "content": "<complete new file content>" },
-    { "path": "blueprint.json", "content": "<complete new file content>" }
+    { "path": "loom.json", "content": "<complete new file content>" }
   ]
 }
 ```
@@ -64,12 +64,12 @@ Filesystem-only, no engine imports:
 
 ```
 <repo>/.loom/tuner/
-├── baseline/blueprint.json            # current baseline (the promoted Blueprint)
+├── baseline/loom.json            # current baseline (the promoted Blueprint)
 ├── branches/<branchId>/
-│   ├── blueprint.json
+│   ├── loom.json
 │   ├── hypothesis.json
 │   └── results.json
-├── history/<timestamp>/blueprint.json # every promoted baseline, never overwritten
+├── history/<timestamp>/loom.json # every promoted baseline, never overwritten
 └── reports/<timestamp>/
     ├── index.html
     ├── summary.json
@@ -97,7 +97,7 @@ Only `improved` and non-regressing candidates are eligible for merge. The margin
 | Guard | Fires when |
 |---|---|
 | Cycle budget | `maxCycles` reached. |
-| Cost budget | Tuner + evaluation spend exceeds `maxCostUsd`. |
+| Cost budget | The **Tuner's own** spend on optimization cycles exceeds its configured ceiling. This is the offline optimizer's budget, not the engine's: a *run* is never stopped over spend (see [model-routing.md](model-routing.md)). |
 | Plateau | No candidate improved for `plateauLimit` consecutive cycles. |
 | Safety | A candidate violates the promotion contract. |
 

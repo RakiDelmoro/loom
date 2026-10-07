@@ -7,6 +7,7 @@ import { createTestBlueprint } from '../test-support/blueprint.ts'
 import { createCounterClock } from '../test-support/clock.ts'
 import { createTemporaryRepository, gitOutput } from '../test-support/git-repository.ts'
 import { call, toolCallResponse } from '../test-support/model.ts'
+import { createFakeRegistry } from '../test-support/providers.ts'
 import { createToolRegistry } from '../tools/registry.ts'
 import { createWorkspaceToolHandlers } from '../tools/workspace.ts'
 import { createGitRunner } from '../workspace/git.ts'
@@ -66,14 +67,14 @@ suite('the scheduler against real git', () => {
 
 		const scheduler = createScheduler(
 			{
-				provider,
+				providers: createFakeRegistry(provider),
 				tools: createToolRegistry(createWorkspaceToolHandlers({ fs })),
 				worktrees: createWorktreeManager({ git: createGitRunner({ cwd: repo }), fs }, { repoPath: repo }),
 				blueprint,
 				now: createCounterClock(),
 				events: () => {},
 			},
-			{ repoPath: repo },
+			{ repoPath: repo, prices: {}, modelOverrides: {} },
 		)
 
 		const result = await scheduler.run({ runId: 'run-1', task: 'write two files' })

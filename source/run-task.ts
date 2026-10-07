@@ -1,16 +1,21 @@
 /**
  * The composition root for one run.
  *
- * Every real dependency is assembled here — the filesystem, git, the model
- * client, the tools, the store — and handed to the modules that were written to
- * receive theirs. This is the only place in the project that does so, which is
- * what keeps everything else testable without a repository or a network.
+ * Every real dependency is assembled here — the filesystem, git, the provider
+ * registry, the tools, the store — and handed to the modules that were written
+ * to receive theirs. This is the only place in the project that does so, which
+ * is what keeps everything else testable without a repository or a network.
  */
 
 import { randomUUID } from 'node:crypto'
 import type { ResultStatus } from './agent/types.ts'
 import { loadBlueprint } from './blueprint/load.ts'
-import { createOpenAiCompatibleProvider } from './model/openai.ts'
+import type { LoadedBlueprint } from './blueprint/types.ts'
+import { loadDeployment } from './deployment/load.ts'
+import { createProviderRegistry, type ProviderRegistry } from './deployment/registry.ts'
+import type { Deployment } from './deployment/types.ts'
+import type { FetchLike } from './model/openai.ts'
+import { validateOverrides } from './model/router.ts'
 import { createNodeFileSystem } from './node-fs.ts'
 import type { RunEventSink } from './runs/events.ts'
 import { createRunLifecycle } from './runs/lifecycle.ts'
@@ -30,10 +35,13 @@ import { createWorktreeManager } from './workspace/worktree.ts'
 export interface RunTaskOptions {
 	readonly repoPath: string
 	readonly blueprintPath: string
+	readonly deploymentPath: string
 	readonly task: string
 	readonly autonomy: AutonomyLevel
-	readonly apiBase: string
-	readonly apiKey?: string
+	/** Role → profile, overriding the Blueprint for this run only. */
+	readonly modelOverrides: Readonly<Record<string, string>>
+	readonly env: Readonly<Record<string, string | undefined>>
+	readonly fetch: FetchLike
 	/** Observed as the run progresses, for live output. */
 	readonly events?: RunEventSink
 }
@@ -61,9 +69,39 @@ export function generateRunId(now: Date): string {
 	return `run-${stamp}-${randomUUID().slice(0, 6)}`
 }
 
+/**
+ * Refuses to start a run whose Blueprint names a provider or a model the
+ * deployment file does not cover. Both omissions would otherwise surface as a
+ * confusing failure deep into a run — or, worse for pricing, as a silently
+ * zero-cost run.
+ */
+export function requireDeploymentCovers(blueprint: LoadedBlueprint, deployment: Deployment): void {
+	const providers = createProviderRegistry({ fetch: async () => new Response(), env: {} }, deployment)
+	const missingProviders = new Set<string>()
+	const missingPrices = new Set<string>()
+
+	for (const profile of Object.values(blueprint.routing)) {
+		if (!providers.has(profile.provider)) missingProviders.add(profile.provider)
+		if (deployment.prices[profile.model] === undefined) missingPrices.add(profile.model)
+	}
+
+	if (missingProviders.size > 0) {
+		throw new Error(`the deployment file has no provider named: ${[...missingProviders].sort().join(', ')}`)
+	}
+	if (missingPrices.size > 0) {
+		throw new Error(
+			`the deployment file has no price for: ${[...missingPrices].sort().join(', ')} — add a price entry (0 is valid) so a run's cost is never silently zero`,
+		)
+	}
+}
+
 export async function runTask(options: RunTaskOptions): Promise<RunOutcome> {
 	const fs = createNodeFileSystem()
 	const blueprint = loadBlueprint({ readTextFile: fs.readTextFile }, options.blueprintPath)
+	const deployment = loadDeployment({ readTextFile: fs.readTextFile }, options.deploymentPath)
+
+	validateOverrides(blueprint, options.modelOverrides)
+	requireDeploymentCovers(blueprint, deployment)
 
 	const git = createGitRunner({ cwd: options.repoPath })
 	const worktrees = createWorktreeManager({ git, fs }, { repoPath: options.repoPath })
@@ -81,12 +119,10 @@ export async function runTask(options: RunTaskOptions): Promise<RunOutcome> {
 	)
 	recorder.begin()
 
-	const provider = createOpenAiCompatibleProvider({
-		id: 'loom',
-		baseUrl: options.apiBase,
-		...(options.apiKey !== undefined ? { apiKey: options.apiKey } : {}),
-		fetch: (url, init) => fetch(url, init),
-	})
+	const providers: ProviderRegistry = createProviderRegistry(
+		{ fetch: options.fetch, env: options.env },
+		deployment,
+	)
 
 	const tools = createToolRegistry([
 		...createWorkspaceToolHandlers({ fs }),
@@ -103,8 +139,8 @@ export async function runTask(options: RunTaskOptions): Promise<RunOutcome> {
 	}
 
 	const scheduler = createScheduler(
-		{ provider, tools, worktrees, blueprint, now: () => Date.now(), events },
-		{ repoPath: options.repoPath },
+		{ providers, tools, worktrees, blueprint, now: () => Date.now(), events },
+		{ repoPath: options.repoPath, prices: deployment.prices, modelOverrides: options.modelOverrides },
 	)
 
 	const result = await scheduler.run({ runId, task: options.task })

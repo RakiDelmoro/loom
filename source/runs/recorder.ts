@@ -10,12 +10,12 @@
  *     which is exactly what `loom clean` needs to tidy up after it.
  */
 
+import { addUsage, ZERO_USAGE } from '../deployment/cost.ts'
+import type { Usage } from '../model/types.ts'
 import type { RunResult } from '../scheduler/types.ts'
 import type { RunEvent, RunEventSink } from './events.ts'
 import type { RunStore } from './store.ts'
-import type { AgentRecord, AutonomyLevel, RunManifest, RunStatus } from './types.ts'
-
-const ZERO_USAGE = { inputTokens: 0, cachedInputTokens: 0, outputTokens: 0 }
+import type { AgentRecord, AutonomyLevel, ModelUsage, RunManifest, RunStatus } from './types.ts'
 
 export interface RunRecorderDependencies {
 	readonly store: RunStore
@@ -38,11 +38,44 @@ export interface RunRecorder {
 	abandon(message: string): RunManifest
 }
 
+interface RunTotals {
+	readonly usage: Usage
+	readonly costUsd: number
+	readonly models: readonly ModelUsage[]
+}
+
+/** Rolls per-agent totals up to the run, and breaks them down by model. */
+function summarize(agents: readonly AgentRecord[]): RunTotals {
+	let usage: Usage = { ...ZERO_USAGE }
+	let costUsd = 0
+	const byModel = new Map<string, { usage: Usage; costUsd: number }>()
+
+	for (const agent of agents) {
+		usage = addUsage(usage, agent.usage)
+		costUsd += agent.costUsd
+
+		const existing = byModel.get(agent.model) ?? { usage: { ...ZERO_USAGE }, costUsd: 0 }
+		byModel.set(agent.model, {
+			usage: addUsage(existing.usage, agent.usage),
+			costUsd: existing.costUsd + agent.costUsd,
+		})
+	}
+
+	const models: ModelUsage[] = [...byModel].map(([model, totals]) => ({
+		model,
+		usage: totals.usage,
+		costUsd: totals.costUsd,
+	}))
+	models.sort((left, right) => left.model.localeCompare(right.model))
+	return { usage, costUsd, models }
+}
+
 export function createRunRecorder(dependencies: RunRecorderDependencies, options: RunRecorderOptions): RunRecorder {
 	const startedAt = new Date(dependencies.now()).toISOString()
 	const agents: AgentRecord[] = []
 
 	function persist(status: RunStatus, finishedAt: string | null): RunManifest {
+		const totals = summarize(agents)
 		const manifest: RunManifest = {
 			runId: options.runId,
 			status,
@@ -53,14 +86,9 @@ export function createRunRecorder(dependencies: RunRecorderDependencies, options
 			startedAt,
 			finishedAt,
 			agents: [...agents],
-			usage: agents.reduce(
-				(total, agent) => ({
-					inputTokens: total.inputTokens + agent.usage.inputTokens,
-					cachedInputTokens: total.cachedInputTokens + agent.usage.cachedInputTokens,
-					outputTokens: total.outputTokens + agent.usage.outputTokens,
-				}),
-				{ ...ZERO_USAGE },
-			),
+			usage: totals.usage,
+			costUsd: totals.costUsd,
+			models: totals.models,
 		}
 		dependencies.store.writeManifest(options.runId, manifest)
 		return manifest
@@ -86,7 +114,9 @@ export function createRunRecorder(dependencies: RunRecorderDependencies, options
 				sha: event.sha,
 				startedAt: event.startedAt,
 				finishedAt: event.finishedAt,
+				model: event.model,
 				usage: event.usage,
+				costUsd: event.costUsd,
 			})
 			persist('running', null)
 		},

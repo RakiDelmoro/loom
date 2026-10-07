@@ -25,7 +25,7 @@ const validDocument = {
 		reasoner: { provider: 'anthropic', model: 'claude-sonnet-4', temperature: 0.2 },
 		worker: { provider: 'local', model: 'qwen3-coder-30b', temperature: 0.1 },
 	},
-	budgets: { maxAgentDepth: 6, maxConcurrentAgents: 8, maxCostUsd: 5, maxTokensPerRun: 2000000, toolTimeoutSeconds: 60 },
+	budgets: { maxAgentDepth: 6, maxConcurrentAgents: 8, toolTimeoutSeconds: 60 },
 	permissions: { mode: 'workspace-write', requireApproval: [] },
 }
 
@@ -89,8 +89,22 @@ describe('parseBlueprintFile', () => {
 		expect(captureValidationError(() => parseBlueprintFile(broken)).path).toBe('blueprint.budgets.maxAgentDepth')
 	})
 
-	test('rejects a negative cost ceiling', () => {
-		const broken = { ...validDocument, budgets: { ...validDocument.budgets, maxCostUsd: -1 } }
+	test('parses advisory alert thresholds', () => {
+		const file = parseBlueprintFile({ ...validDocument, alerts: { costUsd: 5, tokens: 1000 } })
+		expect(file.alerts).toEqual({ costUsd: 5, tokens: 1000 })
+	})
+
+	test('defaults alerts to empty, so a Blueprint without them still loads', () => {
+		expect(parseBlueprintFile(validDocument).alerts).toEqual({})
+	})
+
+	test('rejects a negative alert threshold', () => {
+		const broken = { ...validDocument, alerts: { costUsd: -1 } }
+		expect(captureValidationError(() => parseBlueprintFile(broken)).path).toBe('blueprint.alerts.costUsd')
+	})
+
+	test('rejects a budget field that was retired, rather than silently ignoring it', () => {
+		const broken = { ...validDocument, budgets: { ...validDocument.budgets, maxCostUsd: 5 } }
 		expect(captureValidationError(() => parseBlueprintFile(broken)).path).toBe('blueprint.budgets.maxCostUsd')
 	})
 })

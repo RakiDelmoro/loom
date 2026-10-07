@@ -220,6 +220,7 @@ Examples: everything in `source/blueprint/parse.ts`, `parseChatCompletion` in
 ```
 loom/
 ├── loom.json          the example Blueprint
+├── loom.deployment.json  the example deployment (providers and model prices)
 ├── tools/             tool manifests referenced by the Blueprint
 ├── prompts/           role system prompts referenced by the Blueprint
 ├── plan/              the design and roadmap (documents, not code)
@@ -229,11 +230,13 @@ loom/
     ├── run-task.ts    the composition root for one run
     ├── errors.ts      ValidationError, describeError
     ├── result.ts      OpResult — the outcome of a fallible operation
+    ├── validation.ts  the shared validation vocabulary (expect*, rejectUnknownKeys)
     ├── fs.ts          the filesystem boundary (types only)
     ├── node-fs.ts     the real filesystem leaf
     ├── guards.ts      the canonical isRecord guard
     ├── agent/         the agent loop and its result types
     ├── blueprint/     types, parsers, loader
+    ├── deployment/    providers, model prices, cost accounting
     ├── model/         provider interface, fake, openai client, router
     ├── runs/          the manifest, the event log, the recorder, the lifecycle
     ├── scheduler/     the bounded pool and the agent-tree scheduler

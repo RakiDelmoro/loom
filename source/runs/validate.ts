@@ -9,7 +9,7 @@
 import { isResultStatus } from '../agent/types.ts'
 import { isRecord } from '../guards.ts'
 import type { Usage } from '../model/types.ts'
-import type { AgentRecord, AutonomyLevel, RunManifest, RunStatus } from './types.ts'
+import type { AgentRecord, AutonomyLevel, ModelUsage, RunManifest, RunStatus } from './types.ts'
 
 function isRunStatus(value: unknown): value is RunStatus {
 	return (
@@ -34,6 +34,21 @@ function isUsage(value: unknown): value is Usage {
 	)
 }
 
+function isFiniteNumber(value: unknown): value is number {
+	return typeof value === 'number' && Number.isFinite(value)
+}
+
+function parseModelUsage(value: unknown): ModelUsage | null {
+	if (!isRecord(value)) return null
+	const model = value['model']
+	const usage = value['usage']
+	const costUsd = value['costUsd']
+	if (typeof model !== 'string') return null
+	if (!isUsage(usage)) return null
+	if (!isFiniteNumber(costUsd)) return null
+	return { model, usage, costUsd }
+}
+
 function parseAgentRecord(value: unknown): AgentRecord | null {
 	if (!isRecord(value)) return null
 
@@ -47,7 +62,9 @@ function parseAgentRecord(value: unknown): AgentRecord | null {
 	const sha = value['sha']
 	const startedAt = value['startedAt']
 	const finishedAt = value['finishedAt']
+	const model = value['model']
 	const usage = value['usage']
+	const costUsd = value['costUsd']
 
 	if (typeof agentId !== 'string' || typeof role !== 'string') return null
 	if (parentId !== null && typeof parentId !== 'string') return null
@@ -57,9 +74,11 @@ function parseAgentRecord(value: unknown): AgentRecord | null {
 	if (branch !== null && typeof branch !== 'string') return null
 	if (sha !== null && typeof sha !== 'string') return null
 	if (typeof startedAt !== 'string' || typeof finishedAt !== 'string') return null
+	if (typeof model !== 'string') return null
 	if (!isUsage(usage)) return null
+	if (!isFiniteNumber(costUsd)) return null
 
-	return { agentId, role, parentId, depth, status, summary, branch, sha, startedAt, finishedAt, usage }
+	return { agentId, role, parentId, depth, status, summary, branch, sha, startedAt, finishedAt, model, usage, costUsd }
 }
 
 export function parseRunManifest(value: unknown): RunManifest | null {
@@ -75,6 +94,8 @@ export function parseRunManifest(value: unknown): RunManifest | null {
 	const finishedAt = value['finishedAt']
 	const agents = value['agents']
 	const usage = value['usage']
+	const costUsd = value['costUsd']
+	const models = value['models']
 
 	if (typeof runId !== 'string' || typeof task !== 'string') return null
 	if (!isRunStatus(status)) return null
@@ -84,6 +105,8 @@ export function parseRunManifest(value: unknown): RunManifest | null {
 	if (finishedAt !== null && typeof finishedAt !== 'string') return null
 	if (!Array.isArray(agents)) return null
 	if (!isUsage(usage)) return null
+	if (!isFiniteNumber(costUsd)) return null
+	if (!Array.isArray(models)) return null
 
 	const records: AgentRecord[] = []
 	for (const agent of agents) {
@@ -92,5 +115,25 @@ export function parseRunManifest(value: unknown): RunManifest | null {
 		records.push(record)
 	}
 
-	return { runId, status, task, baseRef, baseSha, autonomy, startedAt, finishedAt, agents: records, usage }
+	const modelUsages: ModelUsage[] = []
+	for (const entry of models) {
+		const parsed = parseModelUsage(entry)
+		if (parsed === null) return null
+		modelUsages.push(parsed)
+	}
+
+	return {
+		runId,
+		status,
+		task,
+		baseRef,
+		baseSha,
+		autonomy,
+		startedAt,
+		finishedAt,
+		agents: records,
+		usage,
+		costUsd,
+		models: modelUsages,
+	}
 }

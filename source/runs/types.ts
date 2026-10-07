@@ -30,7 +30,17 @@ export interface AgentRecord {
 	readonly sha: string | null
 	readonly startedAt: string
 	readonly finishedAt: string
+	/** The model that served this role, so a run is attributable, not just totalled. */
+	readonly model: string
 	readonly usage: Usage
+	readonly costUsd: number
+}
+
+/** What one model contributed to a run. */
+export interface ModelUsage {
+	readonly model: string
+	readonly usage: Usage
+	readonly costUsd: number
 }
 
 export interface RunManifest {
@@ -46,6 +56,9 @@ export interface RunManifest {
 	/** Every agent that ran, in spawn order. */
 	readonly agents: readonly AgentRecord[]
 	readonly usage: Usage
+	readonly costUsd: number
+	/** The same totals, broken down by model. */
+	readonly models: readonly ModelUsage[]
 }
 
 /** The branches an agent produced work on, in spawn order. */
