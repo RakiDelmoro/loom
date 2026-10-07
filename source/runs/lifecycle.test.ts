@@ -129,7 +129,7 @@ describe('reconcileInterruptedRuns', () => {
 		const store = createStore()
 		store.writeManifest('run-1', manifest)
 
-		expect(reconcileInterruptedRuns(store, () => 1_700_000_000_000)).toEqual(['run-1'])
+		expect(reconcileInterruptedRuns(store, () => 1_700_000_000_000, () => false)).toEqual(['run-1'])
 
 		const after = store.readManifest('run-1')
 		expect(after?.status).toBe('interrupted')
@@ -141,11 +141,34 @@ describe('reconcileInterruptedRuns', () => {
 		expect(last?.type).toBe('error')
 	})
 
+	test('a run whose owner is still alive is left alone', () => {
+		// A reader is not the authority on whether a run is in flight. A second UI
+		// on the same project reconciled a benchmark run that was happening at the
+		// time, because it read "nothing can be running when I start" as a fact
+		// about the world instead of a fact about itself.
+		const store = createStore()
+		store.writeManifest('run-1', manifest)
+		store.writeOwner('run-1', { pid: 4242 })
+
+		expect(reconcileInterruptedRuns(store, () => 1_700_000_000_000, (pid) => pid === 4242)).toEqual([])
+		expect(store.readManifest('run-1')?.status).toBe('running')
+		expect(store.readEvents('run-1')).toHaveLength(0)
+	})
+
+	test('a run whose owner has died is marked interrupted', () => {
+		const store = createStore()
+		store.writeManifest('run-1', manifest)
+		store.writeOwner('run-1', { pid: 4242 })
+
+		expect(reconcileInterruptedRuns(store, () => 1_700_000_000_000, () => false)).toEqual(['run-1'])
+		expect(store.readManifest('run-1')?.status).toBe('interrupted')
+	})
+
 	test('a run that already finished is left alone', () => {
 		const store = createStore()
 		store.writeManifest('run-1', { ...manifest, status: 'success', finishedAt: '2026-10-07T14:30:00.000Z' })
 
-		expect(reconcileInterruptedRuns(store, () => 1_700_000_000_000)).toEqual([])
+		expect(reconcileInterruptedRuns(store, () => 1_700_000_000_000, () => false)).toEqual([])
 		expect(store.readManifest('run-1')?.status).toBe('success')
 		expect(store.readEvents('run-1')).toHaveLength(0)
 	})

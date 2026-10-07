@@ -135,6 +135,11 @@ export async function runTask(options: RunTaskOptions): Promise<RunOutcome> {
 		{ store, now: () => Date.now() },
 		{ runId, task: options.task, baseRef: 'HEAD', baseSha: base.value, autonomy: options.autonomy },
 	)
+	// Claim the run before it starts. A manifest saying `running` is only true
+	// while this process is alive, and a reader — a second UI on the same project
+	// — has to be able to tell a slow run from an abandoned one. Without this it
+	// can only guess, and guessing marked a live run interrupted.
+	store.writeOwner(runId, { pid: process.pid })
 	recorder.begin()
 
 	// The abort listener is registered synchronously and runs synchronously, so the

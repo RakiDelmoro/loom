@@ -25,6 +25,8 @@ function createFakeStore(): FakeStore {
 		appendEvent: (_runId, event) => {
 			events.push(event)
 		},
+		writeOwner: () => undefined,
+		readOwner: () => null,
 		listRunIds: () => [],
 		readEvents: () => [],
 	}

@@ -74,26 +74,53 @@ export function undoRun(store: RunStore, lifecycle: RunLifecycle, runId: string)
 }
 
 /**
- * Marks runs that were in flight when the process driving them died.
+ * Marks runs whose owning process has died while they were still in flight.
  *
- * A run can only be *in flight* inside the process running it, so any manifest
- * that still says `running` when a reader starts is one whose process is gone —
- * a crash, a kill, a container that was stopped. Nothing will ever finish it.
+ * A manifest saying `running` is only true while the process that wrote it is
+ * alive, and nothing else can finish that run. This is the same defect as a run
+ * killed by a request, reached through a different door: the request path is
+ * handled where the signal arrives, but a process that dies never gets to run
+ * anything. Left alone, the UI reports "running" beside a log that stopped
+ * hours ago, and the operator is told a thing is happening when nothing is.
  *
- * This is the same defect as a run killed by a request, reached through a
- * different door: the request path is handled where the signal arrives, but a
- * process that dies never gets to run anything. Left alone, the UI reports
- * "running" beside a log that stopped hours ago, and the operator is told a
- * thing is happening when nothing is.
+ * The owner is asked, rather than assumed. A reader is not the authority on
+ * whether a run is in flight — a second UI on the same project is a reader, and
+ * an earlier version of this marked a *live* benchmark run interrupted because
+ * it took "nothing can be running when I start" for a fact about the world
+ * rather than a fact about itself.
  *
  * Written exactly as the killed-run path writes it, so a run that was killed and
  * a run whose process died read the same way afterwards.
  */
-export function reconcileInterruptedRuns(store: RunStore, now: () => number): readonly string[] {
+/**
+ * True unless the operating system says there is no such process.
+ *
+ * An unreadable answer counts as alive: leaving a live run alone shows a stale
+ * status, while marking a live run dead loses work that is still happening.
+ */
+export function processIsAlive(pid: number): boolean {
+	try {
+		process.kill(pid, 0)
+		return true
+	} catch (error) {
+		return (error as { readonly code?: string }).code !== 'ESRCH'
+	}
+}
+
+export function reconcileInterruptedRuns(
+	store: RunStore,
+	now: () => number,
+	isAlive: (pid: number) => boolean,
+): readonly string[] {
 	const recovered: string[] = []
 	for (const runId of store.listRunIds()) {
 		const manifest = store.readManifest(runId)
 		if (manifest === null || manifest.status !== 'running') continue
+
+		// Someone is running it. Leave it alone: a slow run is not an abandoned one.
+		const owner = store.readOwner(runId)
+		if (owner !== null && isAlive(owner.pid)) continue
+
 		store.appendEvent(runId, {
 			type: 'error',
 			agentId: 'run',
