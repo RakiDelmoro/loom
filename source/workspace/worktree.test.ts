@@ -87,13 +87,43 @@ describe('create', () => {
 })
 
 describe('commit', () => {
-	const worktree = { runId: 'run-1', agentId: 'coder-0-1', branch: 'loom/run-1/coder-0-1', path: '/repo/.loom/worktrees/run-1/coder-0-1' }
+	const worktree = {
+		runId: 'run-1',
+		agentId: 'coder-0-1',
+		branch: 'loom/run-1/coder-0-1',
+		path: '/repo/.loom/worktrees/run-1/coder-0-1',
+		baseSha: 'base123',
+	}
 
-	test('returns null and touches nothing when the worktree is clean', () => {
-		const { manager, git } = createManager((args) => (args.includes('status') ? ok('') : undefined))
+	test('returns null when the worktree is clean and the branch has not moved', () => {
+		const { manager, git } = createManager((args) => {
+			if (args.includes('status')) return ok('')
+			if (args.includes('rev-parse')) return ok('base123\n')
+			return undefined
+		})
 
 		expect(manager.commit(worktree, 'work')).toEqual({ kind: 'ok', value: null })
-		expect(git.commands).toEqual([['-C', worktree.path, 'status', '--porcelain']])
+		expect(git.commands).toEqual([
+			['-C', worktree.path, 'status', '--porcelain'],
+			['-C', worktree.path, 'rev-parse', 'HEAD'],
+		])
+	})
+
+	test('reports the branch tip when the tree is clean but the branch has moved', () => {
+		// A clean tree is not the same as no work. Integrating a child commits a
+		// merge into the caller's worktree, so a caller that changed nothing itself
+		// is still carrying its children's work. Reporting null for it dropped the
+		// whole branch at the end of the run and sent the children to the base one
+		// at a time — where three benchmarks conflicted with each other.
+		const { manager, git } = createManager((args) => {
+			if (args.includes('status')) return ok('')
+			if (args.includes('rev-parse')) return ok('merged123\n')
+			return undefined
+		})
+
+		expect(manager.commit(worktree, 'work')).toEqual({ kind: 'ok', value: 'merged123' })
+		// And it does not invent a commit for it: the merge is already committed.
+		expect(git.commands.some((command) => command.includes('commit'))).toBe(false)
 	})
 
 	test('commits dirty work, records the trailers, and returns the new commit', () => {

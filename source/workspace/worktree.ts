@@ -47,7 +47,7 @@ export interface WorktreeManager {
 	/** Creates an isolated worktree on its own branch, based on `baseSha`. */
 	create(runId: string, agentId: string, baseSha: string): OpResult<CreatedWorktree>
 	/** Commits the worktree's changes; `null` when there is nothing to commit. */
-	commit(worktree: WorktreeRef, message: string): OpResult<string | null>
+	commit(worktree: CreatedWorktree, message: string): OpResult<string | null>
 	/**
 	 * Merges `branch` into the working tree at `into`. The target must be clean.
 	 *
@@ -133,22 +133,29 @@ export function createWorktreeManager(
 		}
 	}
 
-	function commit(worktree: WorktreeRef, message: string): OpResult<string | null> {
+	function commit(worktree: CreatedWorktree, message: string): OpResult<string | null> {
 		const status = git.run(['-C', worktree.path, 'status', '--porcelain'])
 		if (status.kind !== 'ok') return { kind: 'failed', message: status.message }
-		if (status.stdout.trim() === '') return { kind: 'ok', value: null }
 
-		const staged = git.run(['-C', worktree.path, 'add', '-A'])
-		if (staged.kind !== 'ok') return { kind: 'failed', message: staged.message }
+		if (status.stdout.trim() !== '') {
+			const staged = git.run(['-C', worktree.path, 'add', '-A'])
+			if (staged.kind !== 'ok') return { kind: 'failed', message: staged.message }
 
-		// The trailers make an agent's commit attributable from `git log` alone.
-		const fullMessage = `${message}\n\nLoom-Run: ${worktree.runId}\nLoom-Agent: ${worktree.agentId}`
-		const committed = git.run([...COMMIT_IDENTITY, '-C', worktree.path, 'commit', '-m', fullMessage])
-		if (committed.kind !== 'ok') return { kind: 'failed', message: committed.message }
+			// The trailers make an agent's commit attributable from `git log` alone.
+			const fullMessage = `${message}\n\nLoom-Run: ${worktree.runId}\nLoom-Agent: ${worktree.agentId}`
+			const committed = git.run([...COMMIT_IDENTITY, '-C', worktree.path, 'commit', '-m', fullMessage])
+			if (committed.kind !== 'ok') return { kind: 'failed', message: committed.message }
+		}
 
+		// A clean tree is not the same as no work. Integrating a child commits a
+		// merge into the caller's worktree, so a caller that changed nothing itself
+		// is still carrying its children's work — and reporting null for it drops
+		// that whole branch at the end of the run, sending the children to the base
+		// one at a time, where they conflict with each other.
 		const head = git.run(['-C', worktree.path, 'rev-parse', 'HEAD'])
 		if (head.kind !== 'ok') return { kind: 'failed', message: head.message }
-		return { kind: 'ok', value: head.stdout.trim() }
+		const tip = head.stdout.trim()
+		return { kind: 'ok', value: tip === worktree.baseSha ? null : tip }
 	}
 
 	/**

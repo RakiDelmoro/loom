@@ -24,7 +24,7 @@ import type { RunEventSink } from '../runs/events.ts'
 import { attemptKey } from '../runs/types.ts'
 import { createToolPolicy } from '../tools/policy.ts'
 import type { ToolRegistry } from '../tools/types.ts'
-import type { WorktreeManager, WorktreeRef } from '../workspace/worktree.ts'
+import type { CreatedWorktree, WorktreeManager } from '../workspace/worktree.ts'
 import { createLimitedProvider, createPool } from './pool.ts'
 import type { AgentNode, RunResult } from './types.ts'
 
@@ -193,7 +193,7 @@ export function createScheduler(
 		const startedAt = dependencies.now()
 
 		let workspaceRoot = callerWorkspace
-		let worktree: WorktreeRef | null = null
+		let worktree: CreatedWorktree | null = null
 		if (role.isolation === 'worktree') {
 			const worktreeResult = dependencies.worktrees.create(state.runId, agentId, state.baseSha)
 			if (worktreeResult.kind !== 'ok') {
