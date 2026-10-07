@@ -143,6 +143,7 @@ export function createRunRecorder(dependencies: RunRecorderDependencies, options
 				role: event.role,
 				parentId: event.parentId,
 				depth: event.depth,
+				task: event.task,
 				status: event.status,
 				summary: event.summary,
 				branch: event.branch,

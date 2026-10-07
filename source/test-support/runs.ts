@@ -14,6 +14,7 @@ export function createTestAgent(overrides: Partial<AgentRecord> = {}): AgentReco
 		role: 'orchestrator',
 		parentId: null,
 		depth: 0,
+		task: 'do the thing',
 		status: 'success',
 		summary: 'did the thing',
 		branch: 'loom/orchestrator-0-1',

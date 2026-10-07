@@ -17,6 +17,7 @@ const valid: RunManifest = {
 			role: 'worker',
 			parentId: 'orchestrator-0-1',
 			depth: 1,
+			task: 'write a file',
 			status: 'success',
 			summary: 'wrote a file',
 			branch: 'loom/run-1/worker-1-2',

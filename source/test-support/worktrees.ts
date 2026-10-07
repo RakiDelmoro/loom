@@ -5,7 +5,7 @@ export interface FakeWorktrees extends WorktreeManager {
 	readonly created: readonly string[]
 	/** Agent ids that were committed, in order. */
 	readonly committed: readonly string[]
-	/** `branch -> into` for every integration, in order. */
+	/** `branch -> into [policy]` for every integration, in order. */
 	readonly integrated: readonly string[]
 }
 
@@ -50,8 +50,8 @@ export function createFakeWorktrees(options: FakeWorktreeOptions = {}): FakeWork
 			commitCount += 1
 			return { kind: 'ok', value: `sha${String(commitCount)}` }
 		},
-		integrate: (into, branch) => {
-			integrated.push(`${branch} -> ${into}`)
+		integrate: (into, branch, integrateOptions) => {
+			integrated.push(`${branch} -> ${into} [${integrateOptions.onConflict}]`)
 			if (options.integrationConflict === true) return { kind: 'failed', message: 'merge conflict' }
 			return { kind: 'ok', value: null }
 		},

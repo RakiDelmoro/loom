@@ -36,6 +36,7 @@ const finishEvent: RunEvent = {
 	role: 'worker',
 	parentId: 'orchestrator-0-1',
 	depth: 1,
+	task: 'write a file',
 	status: 'success',
 	summary: 'wrote a file',
 	branch: 'loom/run-1/worker-1-2',
@@ -88,6 +89,7 @@ describe('createRunRecorder', () => {
 				role: 'worker',
 				parentId: 'orchestrator-0-1',
 				depth: 1,
+				task: 'write a file',
 				status: 'success',
 				summary: 'wrote a file',
 				branch: 'loom/run-1/worker-1-2',
@@ -115,8 +117,9 @@ describe('createRunRecorder', () => {
 			role: 'orchestrator',
 			parentId: null,
 			depth: 0,
+			task: 'do it',
 		})
-		recorder.events({ type: 'agent_start', agentId: 'worker-1-2', role: 'worker', parentId: 'orchestrator-0-1', depth: 1 })
+		recorder.events({ type: 'agent_start', agentId: 'worker-1-2', role: 'worker', parentId: 'orchestrator-0-1', depth: 1, task: 'write a file' })
 		recorder.events(finishEvent)
 		recorder.events({ ...finishEvent, agentId: 'orchestrator-0-1', role: 'orchestrator', parentId: null, depth: 0 })
 
@@ -135,7 +138,7 @@ describe('createRunRecorder', () => {
 	test('an agent that starts but never finishes is not invented into the manifest', () => {
 		const { recorder } = createRecorder()
 		recorder.begin()
-		recorder.events({ type: 'agent_start', agentId: 'slow-0-1', role: 'worker', parentId: null, depth: 0 })
+		recorder.events({ type: 'agent_start', agentId: 'slow-0-1', role: 'worker', parentId: null, depth: 0, task: 'never finishes' })
 
 		expect(recorder.finish(result).agents).toEqual([])
 	})

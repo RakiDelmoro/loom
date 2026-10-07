@@ -134,6 +134,23 @@ Integrations into one workspace are serialized: siblings finish concurrently, an
 
 **This was not true until a real model found it.** `shared` originally meant the base repository, and child branches merged only at the end of the run. So a `reviewer` — `shared`, and therefore sitting in the base — could never see a coder's work, reported "the change did not land", and the orchestrator retried until a coder wrote into the base through a shell to make the review pass. The record shows four coders on a one-line bugfix, three failed reviews, and a benchmark that scored the escape as a success.
 
+### What actually lands
+
+Two rules decide which of a run's branches its work consists of. Both were missing, and both cost real benchmark runs.
+
+**Only a successful role's work counts.** An attempt that ended in `error` keeps its commits on its own branch, for inspection, and does not travel. Reproduced: three coders hit their turn limit, ended `error`, and had their commits merged into the base anyway — the merge filtered on "has a commit" and never looked at status.
+
+**A retry supersedes the attempt it replaced.** The caller asked a second time because the first answer was not good enough, so the newer attempt *replaces* it:
+
+- at the end of the run, only the **last successful attempt of each request** is merged;
+- mid-run, when a second attempt at the same request reaches the caller's tree, the integration resolves conflicts in the newer attempt's favour instead of refusing.
+
+Merging both was self-defeating: each attempt was written against the same base, so two attempts at the same files conflict arithmetically — and the more persistent the loop, the less able the run was to deliver anything at all. Retrying is the intended recovery mechanism; it cannot also be what breaks the run.
+
+A **request** is a role, a task, and the agent that asked — so the same role asked for two *different* things is two pieces of work and both land, while the same thing asked twice is one. That is why the delegated task is now recorded on each agent: without it, "the orchestrator asked again" cannot be told from "the orchestrator asked two agents for different things" — the difference between a retry and parallel work, and the signal any progress check would need.
+
+The limit is honest: recognition is textual, so a retry that *rewords* its task reads as new work. A model that rewords has changed its approach, which is arguably not the same attempt.
+
 ### Who reviews, and who merges
 A branch per agent is a **safety net and a merge point**, not an obligation on the operator. The default path is autonomous:
 

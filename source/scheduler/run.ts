@@ -21,6 +21,7 @@ import { routeRole } from '../model/router.ts'
 import type { ToolSpec } from '../model/types.ts'
 import type { RunControl } from '../runs/control.ts'
 import type { RunEventSink } from '../runs/events.ts'
+import { attemptKey } from '../runs/types.ts'
 import { createToolPolicy } from '../tools/policy.ts'
 import type { ToolRegistry } from '../tools/types.ts'
 import type { WorktreeManager, WorktreeRef } from '../workspace/worktree.ts'
@@ -61,6 +62,8 @@ interface MutableAgentNode {
 	agentId: string
 	role: string
 	parentId: string | null
+	/** What this role was asked; with role and parent, it identifies a retry. */
+	task: string
 	depth: number
 	startedAt: number
 	finishedAt: number
@@ -80,6 +83,8 @@ interface RunState {
 	tokenAlertFired: boolean
 	/** One integration at a time per workspace; siblings finish concurrently. */
 	readonly integrations: Map<string, Promise<void>>
+	/** Requests whose work has already been accepted into a caller's tree. */
+	readonly accepted: Set<string>
 }
 
 export function createScheduler(
@@ -204,6 +209,7 @@ export function createScheduler(
 			agentId,
 			role: roleName,
 			parentId,
+			task,
 			depth,
 			startedAt,
 			finishedAt: startedAt,
@@ -212,7 +218,7 @@ export function createScheduler(
 			sha: null,
 		}
 		state.agents.push(node)
-		dependencies.events({ type: 'agent_start', agentId, role: roleName, parentId, depth })
+		dependencies.events({ type: 'agent_start', agentId, role: roleName, parentId, depth, task })
 
 		const outcome = await runAgentLoop(
 			{
@@ -260,10 +266,27 @@ export function createScheduler(
 		// run. A `shared` role works in the caller's tree, which is why it is now
 		// able to review a sibling's work at all.
 		let card = outcome.card
-		if (worktree !== null && sha !== null && parentId !== null) {
-			const integrated = await withWorkspaceLock(state, callerWorkspace, () =>
-				dependencies.worktrees.integrate(callerWorkspace, worktree.branch),
-			)
+		// Only a role that succeeded has work worth carrying. A failed attempt's
+		// commits stay on its own branch: three coders that hit their turn limit
+		// were having their work folded into the caller's tree and then merged.
+		if (worktree !== null && sha !== null && parentId !== null && outcome.card.status === 'success') {
+			// A second attempt at the same request *replaces* the first. The caller
+			// asked again because the first answer was not good enough, so the newer
+			// attempt wins the conflicts rather than losing the merge to its
+			// predecessor — merging both is what made persistence self-defeating.
+			//
+			// Both the decision and the record of it happen inside the lock: two
+			// attempts issued in the same turn finish concurrently, and a check made
+			// outside would let them both conclude they were first.
+			const acceptedKey = attemptKey({ parentId, role: roleName, task })
+			const integrated = await withWorkspaceLock(state, callerWorkspace, () => {
+				const supersedes = state.accepted.has(acceptedKey)
+				const result = dependencies.worktrees.integrate(callerWorkspace, worktree.branch, {
+					onConflict: supersedes ? 'incoming' : 'refuse',
+				})
+				if (result.kind === 'ok') state.accepted.add(acceptedKey)
+				return result
+			})
 			const ok = integrated.kind === 'ok'
 			dependencies.events({
 				type: 'integration',
@@ -287,6 +310,7 @@ export function createScheduler(
 			role: roleName,
 			parentId,
 			depth,
+			task,
 			status: outcome.card.status,
 			summary: outcome.card.summary,
 			branch: node.branch,
@@ -327,6 +351,7 @@ export function createScheduler(
 				costAlertFired: false,
 				tokenAlertFired: false,
 				integrations: new Map(),
+				accepted: new Set(),
 			}
 			const card = await execute(state, blueprint.entryRole, request.task, null, 0, options.repoPath)
 

@@ -78,6 +78,9 @@ function parseAgentRecord(value: unknown): AgentRecord | null {
 	const role = value['role']
 	const parentId = value['parentId']
 	const depth = value['depth']
+	// Tolerant: a manifest written before the field existed reads as an empty task,
+	// which makes every one of its agents its own attempt rather than a retry.
+	const task = typeof value['task'] === 'string' ? value['task'] : ''
 	const status = value['status']
 	const summary = value['summary']
 	const branch = value['branch']
@@ -100,7 +103,7 @@ function parseAgentRecord(value: unknown): AgentRecord | null {
 	if (!isUsage(usage)) return null
 	if (!isFiniteNumber(costUsd)) return null
 
-	return { agentId, role, parentId, depth, status, summary, branch, sha, startedAt, finishedAt, model, usage, costUsd }
+	return { agentId, role, parentId, depth, task, status, summary, branch, sha, startedAt, finishedAt, model, usage, costUsd }
 }
 
 export function parseRunManifest(value: unknown): RunManifest | null {

@@ -48,8 +48,15 @@ export interface WorktreeManager {
 	create(runId: string, agentId: string, baseSha: string): OpResult<CreatedWorktree>
 	/** Commits the worktree's changes; `null` when there is nothing to commit. */
 	commit(worktree: WorktreeRef, message: string): OpResult<string | null>
-	/** Merges `branch` into the working tree at `into`. The target must be clean. */
-	integrate(into: string, branch: string): OpResult<null>
+	/**
+	 * Merges `branch` into the working tree at `into`. The target must be clean.
+	 *
+	 * `onConflict: 'incoming'` resolves conflicting hunks in the incoming branch's
+	 * favour instead of refusing. That is what a *superseding* attempt needs: the
+	 * caller asked a second time because the first answer was not good enough, so
+	 * the newer attempt should replace the older one rather than lose to it.
+	 */
+	integrate(into: string, branch: string, options: { readonly onConflict: 'refuse' | 'incoming' }): OpResult<null>
 	/** Removes one worktree. Idempotent: an already-removed worktree is not an error. */
 	remove(worktree: WorktreeRef): OpResult<null>
 	/** Removes every worktree of a run, and optionally its branches. */
@@ -156,7 +163,7 @@ export function createWorktreeManager(
 	 * cannot be safely aborted, so this refuses instead of risking the caller's
 	 * uncommitted work.
 	 */
-	function integrate(into: string, branch: string): OpResult<null> {
+	function integrate(into: string, branch: string, options: { readonly onConflict: 'refuse' | 'incoming' }): OpResult<null> {
 		const status = git.run(['-C', into, 'status', '--porcelain'])
 		if (status.kind !== 'ok') return { kind: 'failed', message: status.message }
 		if (status.stdout.trim() !== '') {
@@ -170,6 +177,7 @@ export function createWorktreeManager(
 			'merge',
 			'--no-ff',
 			'--no-edit',
+			...(options.onConflict === 'incoming' ? ['-X', 'theirs'] : []),
 			'-m',
 			`Loom: integrate ${branch}`,
 			branch,

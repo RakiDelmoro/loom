@@ -24,6 +24,8 @@ export interface AgentRecord {
 	readonly role: string
 	readonly parentId: string | null
 	readonly depth: number
+	/** What this role was asked to do. See `attemptKey`. */
+	readonly task: string
 	readonly status: ResultStatus
 	readonly summary: string
 	readonly branch: string | null
@@ -62,10 +64,46 @@ export interface RunManifest {
 }
 
 /** The branches an agent produced work on, in spawn order. */
-export function agentBranches(manifest: RunManifest): string[] {
+/**
+ * One request: a role, a task, and the agent that made the request.
+ *
+ * Two agents with the same key are the *same request made again* — a retry, not
+ * two pieces of work. Two agents with the same role but different tasks are
+ * genuinely different work, and both count.
+ */
+export function attemptKey(agent: {
+	readonly parentId: string | null
+	readonly role: string
+	readonly task: string
+}): string {
+	return `${agent.parentId ?? 'root'}\u0000${agent.role}\u0000${agent.task}`
+}
+
+/**
+ * The branches a run's work actually consists of.
+ *
+ * Two filters, both of which were missing and both of which cost real benchmarks:
+ *
+ * 1. **Only a successful role's work counts.** Failed attempts were being merged,
+ *    so three coders that hit their turn limit had their commits land anyway.
+ * 2. **A retry supersedes the attempt it replaces.** Merging every attempt stacked
+ *    competing edits of the same files against the same base, which conflicts
+ *    arithmetically — the more persistent the loop, the less able the run was to
+ *    deliver, which inverts what retrying is for.
+ */
+export function acceptedBranches(manifest: RunManifest): string[] {
+	const lastAttempt = new Map<string, number>()
+	for (const [index, agent] of manifest.agents.entries()) {
+		if (agent.status !== 'success') continue
+		if (agent.sha === null || agent.branch === null) continue
+		lastAttempt.set(attemptKey(agent), index)
+	}
+
+	const keep = new Set(lastAttempt.values())
 	const branches: string[] = []
-	for (const agent of manifest.agents) {
-		if (agent.sha !== null && agent.branch !== null) branches.push(agent.branch)
+	for (const [index, agent] of manifest.agents.entries()) {
+		if (!keep.has(index)) continue
+		if (agent.branch !== null) branches.push(agent.branch)
 	}
 	return branches
 }

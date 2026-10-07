@@ -179,7 +179,7 @@ describe('createScheduler', () => {
 		// Into the caller's tree — not the base repository, which is what a
 		// `shared` role used to be handed and why review was impossible.
 		expect(harness.worktrees.integrated).toEqual([
-			'loom/run-1/worker-1-2 -> /repo/.loom/worktrees/run-1/orchestrator-0-1',
+			'loom/run-1/worker-1-2 -> /repo/.loom/worktrees/run-1/orchestrator-0-1 [refuse]',
 		])
 		expect(harness.events.filter((event) => event.type === 'integration')).toEqual([
 			{
@@ -191,6 +191,61 @@ describe('createScheduler', () => {
 				message: '',
 			},
 		])
+	})
+
+	test('a retry replaces the attempt it supersedes rather than losing to it', async () => {
+		// The reproduction, reduced: the orchestrator asked for the same thing twice,
+		// both attempts committed, and merging both conflicted — so the more
+		// persistent the loop, the less able it was to deliver.
+		const blueprint = createTestBlueprint({
+			orchestrator: { tools: ['agent'], maxChildren: 1 },
+			worker: { tools: [], isolation: 'worktree' },
+		})
+
+		let turns = 0
+		const provider = createFakeProvider((request) => {
+			if (systemOf(request).includes('worker')) {
+				return toolCallResponse([call('w', 'finish', { status: 'success', summary: 'done' })])
+			}
+			if (!sawToolResult(request)) return toolCallResponse([call('c1', 'agent', { role: 'worker', task: 'the same work' })])
+
+			turns += 1
+			if (turns === 1) return toolCallResponse([call('c2', 'agent', { role: 'worker', task: 'the same work' })])
+			return toolCallResponse([call('f', 'finish', { status: 'success', summary: 'done' })])
+		})
+
+		const harness = createRun({ blueprint, provider })
+		await harness.run({ runId: 'run-1', task: 'go' })
+
+		expect(harness.worktrees.integrated).toEqual([
+			'loom/run-1/worker-1-2 -> /repo/.loom/worktrees/run-1/orchestrator-0-1 [refuse]',
+			'loom/run-1/worker-1-3 -> /repo/.loom/worktrees/run-1/orchestrator-0-1 [incoming]',
+		])
+	})
+
+	test('a role that failed does not have its work carried to the caller', async () => {
+		const blueprint = createTestBlueprint({
+			orchestrator: { tools: ['agent'], maxChildren: 1 },
+			worker: { tools: [], isolation: 'worktree' },
+		})
+
+		const provider = createFakeProvider((request) => {
+			// The worker never finishes, so it hits its turn limit and ends in error —
+			// with work committed, which is exactly the shape the reproduction had.
+			if (systemOf(request).includes('worker')) return toolCallResponse([call('w', 'echo', {})])
+			if (!sawToolResult(request)) return toolCallResponse([call('c', 'agent', { role: 'worker', task: 'work' })])
+			return toolCallResponse([call('f', 'finish', { status: 'success', summary: 'done' })])
+		})
+
+		const harness = createRun({ blueprint, provider })
+		const result = await harness.run({ runId: 'run-1', task: 'go' })
+
+		const worker = result.agents.find((agent) => agent.role === 'worker')
+		expect(worker?.card.status).toBe('error')
+		expect(worker?.sha).not.toBeNull()
+		// The commit exists and stays on its own branch: three failed coders were
+		// having their work folded into the caller's tree and then merged.
+		expect(harness.worktrees.integrated).toEqual([])
 	})
 
 	test('a shared role works in its caller’s tree, not the base repository', async () => {
@@ -221,7 +276,7 @@ describe('createScheduler', () => {
 		// The worker is the reviewer's child, and the reviewer shares the
 		// orchestrator's tree — so that is where the worker's work lands.
 		expect(harness.worktrees.integrated).toEqual([
-			'loom/run-1/worker-2-3 -> /repo/.loom/worktrees/run-1/orchestrator-0-1',
+			'loom/run-1/worker-2-3 -> /repo/.loom/worktrees/run-1/orchestrator-0-1 [refuse]',
 		])
 	})
 

@@ -25,7 +25,7 @@ import { createRunLifecycle } from './runs/lifecycle.ts'
 import { createRunRecorder } from './runs/recorder.ts'
 import { createRunStore } from './runs/store.ts'
 import type { AutonomyLevel, RunManifest } from './runs/types.ts'
-import { agentBranches } from './runs/types.ts'
+import { acceptedBranches } from './runs/types.ts'
 import { createScheduler } from './scheduler/run.ts'
 import { createGitToolHandlers } from './tools/git.ts'
 import { createFetchToolHandlers } from './tools/fetch-url.ts'
@@ -173,7 +173,7 @@ export async function runTask(options: RunTaskOptions): Promise<RunOutcome> {
 
 	if (options.autonomy === 'auto' && result.card.status === 'success') {
 		const lifecycle = createRunLifecycle({ git, worktrees }, { repoPath: options.repoPath })
-		for (const branch of agentBranches(manifest)) {
+		for (const branch of acceptedBranches(manifest)) {
 			const merge = lifecycle.mergeBranch(branch)
 			if (merge.kind === 'ok') {
 				merged.push({ branch, sha: merge.value })

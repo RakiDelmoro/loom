@@ -18,6 +18,16 @@ export type RunEvent =
 			readonly role: string
 			readonly parentId: string | null
 			readonly depth: number
+			/**
+			 * What this role was asked to do.
+			 *
+			 * The run's record has always said which role ran and what it reported;
+			 * it never said what it was asked. Without that, "the orchestrator asked
+			 * for the same thing again" cannot be told from "the orchestrator asked
+			 * two agents for different things" — which is the difference between a
+			 * retry and parallel work, and the signal a progress check needs.
+			 */
+			readonly task: string
 	  }
 	| { readonly type: 'tool_call'; readonly agentId: string; readonly tool: string; readonly arguments: string }
 	| {
@@ -47,6 +57,8 @@ export type RunEvent =
 			readonly role: string
 			readonly parentId: string | null
 			readonly depth: number
+			/** The same task `agent_start` carried, so the record is built from one event. */
+			readonly task: string
 			readonly status: ResultStatus
 			readonly summary: string
 			readonly branch: string | null
