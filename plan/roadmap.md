@@ -205,6 +205,7 @@ When you add a row, also update the target milestone's deliverables to describe 
 
 Unbuilt features. None is scheduled; each needs a fresh scoping before work begins.
 
+- **Sandboxed command execution.** `run_shell` cannot be confined by path checks, so a shell escapes its worktree by construction. A `bubblewrap`/`gVisor` sandbox around the shell leaf is the only real fix; until then the container is the boundary and the bench detects the consequence.
 - **MCP client.** Let external MCP servers contribute tools without forking the engine. Highest-value ecosystem item.
 - **Surface completeness.** `/api/runs/:id/cancel`, `GET|PUT /api/blueprint`, `/api/config`, run search and filter, and a WebSocket push channel in place of polling.
 - **OpenTelemetry export.** The spans exist; exporting them through the SDK needs a dependency, which is a decision rather than a task.

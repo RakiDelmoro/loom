@@ -68,8 +68,11 @@ For each benchmark, for each repetition:
 1. **Isolate.** Copy the benchmark's `workspace/` into a fresh temp directory and initialize it as a git repository with one commit. The engine needs a repository (it branches agents from a commit), and the copy is what keeps one benchmark's installs or downloads out of another's.
 2. **Drive.** Run the task against that copy, with the Blueprint under test and `auto` autonomy — so the agents' branches are merged and validation sees the system's *real* output, merge included.
 3. **Collect.** Capture status, cost, wall time, and the run id.
-4. **Validate.** Deterministic checks first; then the judge, if the benchmark declares one and the checks passed.
-5. **Teardown.** Remove the copy — on success, error, and a thrown exception alike. A leaked workspace is a bug, and a suite creates one per repetition.
+4. **Integrity.** Refuse to score a run whose workspace is not the system's output. Two conditions disqualify it: a **merge that did not land** (a conflict, or a base tree too dirty to merge into), and a **base repository left with uncommitted changes** — which means something wrote outside its worktree, because the worktree is where a write is supposed to land and the merge is how it is supposed to arrive. A disqualified run is an `error` carrying the reason, and it is checked **before** validation: reading a tree the run did not produce is worse than useless, and a passing test suite on such a tree is exactly the false credit this gate exists to refuse.
+5. **Validate.** Deterministic checks first; then the judge, if the benchmark declares one and the checks passed.
+6. **Teardown.** Remove the copy — on success, error, and a thrown exception alike. A leaked workspace is a bug, and a suite creates one per repetition.
+
+The integrity gate is not decoration. Before it existed, a real-model run passed `implement_clamp` at 1/1 while the change it was credited for had arrived by a shell heredoc written into the *base* repository, bypassing every worktree and every merge — and both candidate branches were left unmerged. The score was an artifact of an escape, not a measurement of the system.
 
 **Repetitions.** `--repetitions` (the plan's `repetitionsPerBenchmark`) — LLM work is stochastic, and a single sample is a coin flip. Results are aggregated across repetitions with the interval reported, not hidden.
 

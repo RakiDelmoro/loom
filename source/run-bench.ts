@@ -72,7 +72,24 @@ export async function runBench(options: RunBenchOptions): Promise<SuiteResult> {
 					env: options.env,
 					fetch: options.fetch,
 				})
-				return { status: outcome.status, runId: outcome.manifest.runId, costUsd: outcome.manifest.costUsd }
+
+				const reasons: string[] = []
+				for (const failure of outcome.mergeFailures) {
+					reasons.push(`the merge of ${failure.branch} did not land: ${failure.message}`)
+				}
+
+				// A clean base is the proof the work travelled the merge path. A dirty
+				// one means something wrote outside its worktree — the file tools
+				// refuse that, but a shell command cannot be confined to a directory,
+				// so this is where the escape is caught rather than credited.
+				const status = createGitRunner({ cwd: request.workspace }).run(['status', '--porcelain'])
+				if (status.kind !== 'ok') {
+					reasons.push(`the base repository could not be inspected: ${status.message}`)
+				} else if (status.stdout.trim() !== '') {
+					reasons.push('the run left uncommitted changes in the base repository, so its output never went through the merge path')
+				}
+
+				return { status: outcome.status, runId: outcome.manifest.runId, costUsd: outcome.manifest.costUsd, reasons }
 			},
 			runValidation: (workspaceRoot, spec) => runValidation({ fs, runCommand }, workspaceRoot, spec),
 			judge,

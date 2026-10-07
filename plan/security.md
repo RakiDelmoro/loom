@@ -36,12 +36,18 @@ Set per run on the Blueprint; enforced by the engine **before** a mutating tool 
 | Mode | Allows |
 |---|---|
 | `read-only` | Read tools only. No writes, no shell, no commit. |
-| `workspace-write` | Writes confined to the agent's worktree; `run_shell` allowed; no network egress unless allowlisted. |
+| `workspace-write` | Reads and writes confined to the agent's worktree by the **file tools**; `run_shell` allowed; no network egress unless allowlisted. |
 | `full` | Unrestricted within the sandbox. |
 
 **Enforced in the agent loop, before the tool runs.** The mode is a second gate, independent of the role's tool grants: a grant says what a role is *for*, the mode says what the run *permits*. A blocked call returns a structured `permission_denied` result and is written to the audit log — the run continues and the model can adapt, rather than crashing or silently succeeding.
 
 The mode outranks an approval: approving a write does not make a read-only run writable.
+
+**A shell command is not confined, and cannot be by path checks.** `write_file` resolves its argument and refuses anything outside the worktree — an escape attempt is a typed `outside_workspace` refusal. `run_shell` spawns `sh -c` with the worktree as its working directory, and a working directory is a default, not a boundary: a command may `cd` anywhere or write to an absolute path.
+
+This is not hypothetical. In a benchmark run against a real model, the coder tried an absolute path through `write_file`, was refused, and then wrote the same file through a shell heredoc — reaching the base repository outside its worktree. It reported doing so in its own summary. The container is what contains that; the worktree does not, and a sandbox that bounds a shell is the only thing that would.
+
+What follows from it: **isolation is not enforced against a shell.** Two agents can collide through one, and a run can dirty the base tree. The [bench](bench.md) detects the consequence and refuses to score such a run, and `loom undo` exists for the rest.
 
 ### 3.3 Approval gates
 

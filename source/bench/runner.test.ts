@@ -58,7 +58,7 @@ function createHarness(options: {
 		runTask: async (request) => {
 			tasks.push(request.task)
 			if (options.task !== undefined) return options.task(request.workspace, request.task)
-			return { status: 'success', runId: 'run-1', costUsd: 0.01 }
+			return { status: 'success', runId: 'run-1', costUsd: 0.01, reasons: [] }
 		},
 		runValidation: () => options.observation ?? PASSING,
 		judge: options.judge ?? null,
@@ -121,12 +121,32 @@ describe('runSuite', () => {
 	})
 
 	test('a run that did not finish is an error, not a fail', async () => {
-		const harness = createHarness({ task: async () => ({ status: 'error', runId: 'run-9', costUsd: 0.02 }) })
+		const harness = createHarness({ task: async () => ({ status: 'error', runId: 'run-9', costUsd: 0.02, reasons: [] }) })
 		const result = await harness.run('optimization')
 
 		expect(result.outcomes.every((outcome) => outcome.status === 'error')).toBe(true)
 		expect(result.outcomes[0]?.reasons).toEqual(['the run finished error'])
 		expect(result.outcomes[0]?.runId).toBe('run-9')
+	})
+
+	test('a run whose work never landed is not scored, even when the tests pass', async () => {
+		// The bug this defends against: an agent wrote into the base repository
+		// through a shell, escaping its worktree. The tests passed — on a tree the
+		// merge path never produced — and the benchmark credited it.
+		const harness = createHarness({
+			task: async () => ({
+				status: 'success',
+				runId: 'run-7',
+				costUsd: 0.03,
+				reasons: ['the run left uncommitted changes in the base repository'],
+			}),
+			observation: PASSING,
+		})
+		const result = await harness.run('optimization')
+
+		expect(result.outcomes[0]?.status).toBe('error')
+		expect(result.outcomes[0]?.score).toBe(0)
+		expect(result.outcomes[0]?.reasons).toEqual(['the run left uncommitted changes in the base repository'])
 	})
 
 	test('a validation failure is a fail, carrying its reasons', async () => {

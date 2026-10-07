@@ -25,6 +25,15 @@ export interface BenchmarkTaskRun {
 	readonly status: ResultStatus
 	readonly runId: string
 	readonly costUsd: number
+	/**
+	 * Anything that makes the workspace **not the system's output** — a merge that
+	 * did not land, a base tree left dirty by a write that escaped a worktree.
+	 *
+	 * A run with any of these cannot be scored: the validation would be reading a
+	 * tree the run did not produce, and a benchmark that credits work the merge
+	 * path never carried is measuring nothing.
+	 */
+	readonly reasons: readonly string[]
 }
 
 export type BenchmarkTaskRunner = (options: {
@@ -116,6 +125,12 @@ async function runOnce(
 
 		if (run.status !== 'success') {
 			return outcome(spec.id, repetition, 'error', 0, [`the run finished ${run.status}`], run.runId, run.costUsd, wallTimeSeconds)
+		}
+
+		// Before the validation, not after: a workspace the run did not produce is
+		// not evidence of anything, so reading it would be worse than useless.
+		if (run.reasons.length > 0) {
+			return outcome(spec.id, repetition, 'error', 0, run.reasons, run.runId, run.costUsd, wallTimeSeconds)
 		}
 
 		const observation = dependencies.runValidation(workspace, spec.validation)
