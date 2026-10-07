@@ -72,19 +72,19 @@ Milestones are sequential: the isolation primitive must exist before the engine 
 
 **Deliverables.**
 
-1. **Run manifest** (`run.json`): status, agents, branches, commit shas, cost, timings, base ref.
-2. **Event log** (`events.jsonl`): append-only `agent_start`, `tool_call`, `commit`, `error`, `run_finished`.
-3. **CLI:** `loom status`, `loom diff [--agent]`, `loom merge --agent`, `loom undo`, `loom clean [--branches]`.
-4. **Autonomy level** — `auto` | `supervised` | `manual`, governing whether the operator approves a merge. See [isolation.md](isolation.md) "Who reviews, and who merges".
+1. **Run manifest** (`run.json`): status, agents, branches, commit shas, token usage, timings, and the base ref and commit. Rewritten as each agent finishes, so a run killed mid-flight still leaves a manifest naming every agent that ran.
+2. **Event log** (`events.jsonl`): append-only `run_started`, `agent_start`, `tool_call`, `tool_result`, `commit`, `agent_finish`, `error`, `run_finished`. Never rewritten, so it stays truthful when a run is killed.
+3. **CLI:** `loom run`, `loom runs`, `loom status`, `loom diff [--agent]`, `loom merge --agent`, `loom undo`, `loom clean [--branches]`.
+4. **Autonomy level** — `auto` | `supervised` | `manual`. `auto` merges the run's branches when it finishes successfully; `supervised` and `manual` leave merging to the operator. See [isolation.md](isolation.md) "Who reviews, and who merges".
 
 **Acceptance criteria.**
 
-- [ ] An end-to-end run on a real repo yields branches whose `git diff` matches the manifest.
-- [ ] `loom diff` shows the union of all agents; `--agent` shows one.
-- [ ] `loom merge --agent` applies exactly one branch to the base.
-- [ ] `loom clean` restores the repo to a pristine worktree state.
-- [ ] `loom undo <runId>` restores the base branch to the run's recorded starting commit.
-- [ ] A crash mid-run leaves a resumable or cleanly-abandoned state, never a leaked worktree.
+- [x] An end-to-end run on a real repo yields branches whose `git diff` matches the manifest.
+- [x] `loom diff` shows the union of all agents; `--agent` shows one.
+- [x] `loom merge --agent` applies exactly one branch to the base.
+- [x] `loom clean` restores the repo to a pristine worktree state.
+- [x] `loom undo <runId>` restores the base branch to the run's recorded starting commit.
+- [x] A run killed mid-flight leaves a truthful manifest and a worktree that `loom clean` removes — never a leak. (Resuming an interrupted run is not implemented; it is abandoned cleanly.)
 
 ---
 

@@ -15,8 +15,10 @@
 import type { RoutingProfile } from '../blueprint/types.ts'
 import { isRecord } from '../guards.ts'
 import type { Message, Provider, ToolCall, ToolSpec, Usage } from '../model/types.ts'
+import type { RunEventSink } from '../runs/events.ts'
 import type { ToolRegistry } from '../tools/types.ts'
-import type { AgentOutcome, ResultCard, ResultStatus } from './types.ts'
+import type { AgentOutcome, ResultCard } from './types.ts'
+import { isResultStatus } from './types.ts'
 
 export const AGENT_TOOL = 'agent'
 export const FINISH_TOOL = 'finish'
@@ -40,10 +42,13 @@ export interface AgentLoopDependencies {
 	readonly tools: ToolRegistry
 	/** Hands a sub-task to another role and resolves with that role's card. */
 	readonly delegate: (request: DelegationRequest) => Promise<ResultCard>
+	readonly events: RunEventSink
 	readonly now: () => number
 }
 
 export interface AgentLoopRequest {
+	/** The role instance running; every event the loop emits is attributed to it. */
+	readonly agentId: string
 	readonly systemPrompt: string
 	readonly task: string
 	readonly profile: RoutingProfile
@@ -52,6 +57,11 @@ export interface AgentLoopRequest {
 	readonly maxTurns: number
 	/** How many `agent` calls this role may have in flight at once. */
 	readonly maxChildren: number
+}
+
+interface ToolCallOutcome {
+	readonly serialized: string
+	readonly kind: string
 }
 
 export async function runAgentLoop(
@@ -159,14 +169,14 @@ async function dispatchToolCalls(
 
 	for (const call of toolCalls) {
 		if (call.name === AGENT_TOOL) continue
-		results.set(call.id, await runToolCall(dependencies, request, call))
+		results.set(call.id, (await runToolCall(dependencies, request, call)).serialized)
 	}
 
 	const delegations = toolCalls.filter((call) => call.name === AGENT_TOOL)
 	for (let index = 0; index < delegations.length; index += request.maxChildren) {
 		const batch = delegations.slice(index, index + request.maxChildren)
 		const settled = await Promise.all(batch.map((call) => runToolCall(dependencies, request, call)))
-		for (const [offset, call] of batch.entries()) results.set(call.id, settled[offset] ?? '')
+		for (const [offset, call] of batch.entries()) results.set(call.id, settled[offset]?.serialized ?? '')
 	}
 
 	return toolCalls.map((call) => results.get(call.id) ?? '')
@@ -176,26 +186,54 @@ async function runToolCall(
 	dependencies: AgentLoopDependencies,
 	request: AgentLoopRequest,
 	call: ToolCall,
-): Promise<string> {
+): Promise<ToolCallOutcome> {
+	dependencies.events({
+		type: 'tool_call',
+		agentId: request.agentId,
+		tool: call.name,
+		arguments: call.arguments,
+	})
+	const outcome = await executeToolCall(dependencies, request, call)
+	dependencies.events({
+		type: 'tool_result',
+		agentId: request.agentId,
+		tool: call.name,
+		kind: outcome.kind,
+	})
+	return outcome
+}
+
+async function executeToolCall(
+	dependencies: AgentLoopDependencies,
+	request: AgentLoopRequest,
+	call: ToolCall,
+): Promise<ToolCallOutcome> {
 	if (call.name === AGENT_TOOL) {
 		const delegation = parseDelegation(call.arguments)
 		if (delegation.kind !== 'ok') {
-			return JSON.stringify({ kind: 'invalid_arguments', message: delegation.message })
+			return {
+				serialized: JSON.stringify({ kind: 'invalid_arguments', message: delegation.message }),
+				kind: 'invalid_arguments',
+			}
 		}
-		return JSON.stringify(await dependencies.delegate(delegation.value))
+		const card = await dependencies.delegate(delegation.value)
+		return { serialized: JSON.stringify(card), kind: card.status }
 	}
 
 	if (call.name === FINISH_TOOL) {
-		return JSON.stringify({
+		return {
+			serialized: JSON.stringify({
+				kind: 'invalid_arguments',
+				message: 'finish needs status "success" | "error" | "needs_clarification" and a non-empty summary',
+			}),
 			kind: 'invalid_arguments',
-			message: 'finish needs status "success" | "error" | "needs_clarification" and a non-empty summary',
-		})
+		}
 	}
 
 	const result = await dependencies.tools.run(call.name, parseArguments(call.arguments), {
 		workspaceRoot: request.workspaceRoot,
 	})
-	return JSON.stringify(result)
+	return { serialized: JSON.stringify(result), kind: result.kind }
 }
 
 function settle(card: ResultCard, turns: number, usage: Usage, startedAt: number, finishedAt: number): AgentOutcome {
@@ -221,10 +259,6 @@ function parseDelegation(raw: string): { kind: 'ok'; value: DelegationRequest } 
 	if (typeof role !== 'string' || role === '') return { kind: 'invalid', message: 'agent needs a non-empty role' }
 	if (typeof task !== 'string' || task === '') return { kind: 'invalid', message: 'agent needs a non-empty task' }
 	return { kind: 'ok', value: { role, task } }
-}
-
-function isResultStatus(value: unknown): value is ResultStatus {
-	return value === 'success' || value === 'error' || value === 'needs_clarification'
 }
 
 function cardFromFinish(call: ToolCall): ResultCard | null {

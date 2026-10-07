@@ -225,13 +225,17 @@ loom/
 ├── plan/              the design and roadmap (documents, not code)
 └── source/
     ├── cli.ts         the `loom` command (glue)
+    ├── cli-args.ts    command-line argument parsing
+    ├── run-task.ts    the composition root for one run
     ├── errors.ts      ValidationError, describeError
+    ├── result.ts      OpResult — the outcome of a fallible operation
     ├── fs.ts          the filesystem boundary (types only)
     ├── node-fs.ts     the real filesystem leaf
     ├── guards.ts      the canonical isRecord guard
     ├── agent/         the agent loop and its result types
     ├── blueprint/     types, parsers, loader
     ├── model/         provider interface, fake, openai client, router
+    ├── runs/          the manifest, the event log, the recorder, the lifecycle
     ├── scheduler/     the bounded pool and the agent-tree scheduler
     ├── tools/         tool types, registry, and the built-in tools
     ├── workspace/     naming, git exclude, the git leaf, the worktree manager

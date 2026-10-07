@@ -1,31 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 import { createMemoryFileSystem } from '../test-support/memory-fs.ts'
-import type { GitResult, GitRunner } from './git.ts'
+import { createFakeGit, failed, ok } from '../test-support/fake-git.ts'
+import type { GitResult } from './git.ts'
 import { createWorktreeManager, parseWorktreeList } from './worktree.ts'
-
-const ok = (stdout = ''): GitResult => ({ kind: 'ok', stdout })
-const failed = (message: string): GitResult => ({ kind: 'failed', message })
-
-interface FakeGit {
-	readonly runner: GitRunner
-	readonly commands: readonly string[][]
-}
-
-/** Records every command and answers from `respond`; an unscripted call is a test bug. */
-function createFakeGit(respond: (args: readonly string[]) => GitResult | undefined): FakeGit {
-	const commands: string[][] = []
-	return {
-		commands,
-		runner: {
-			run(args: readonly string[]): GitResult {
-				commands.push([...args])
-				const result = respond(args)
-				if (result === undefined) throw new Error(`unexpected git call: ${args.join(' ')}`)
-				return result
-			},
-		},
-	}
-}
 
 function createManager(
 	respond: (args: readonly string[]) => GitResult | undefined,

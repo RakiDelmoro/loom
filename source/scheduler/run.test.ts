@@ -9,7 +9,8 @@ import { createFakeWorktrees, type FakeWorktrees } from '../test-support/worktre
 import { createToolRegistry } from '../tools/registry.ts'
 import type { ToolRegistry } from '../tools/types.ts'
 import { createScheduler } from './run.ts'
-import type { RunEvent, RunResult } from './types.ts'
+import type { RunEvent } from '../runs/events.ts'
+import type { RunResult } from './types.ts'
 
 interface RunHarness {
 	readonly run: (request: { runId: string; task: string }) => Promise<RunResult>
@@ -159,9 +160,9 @@ describe('createScheduler', () => {
 		// Depth 0 is the orchestrator, depth 1 is the worker; depth 2 is refused.
 		expect(result.agents.map((agent) => agent.depth)).toEqual([0, 1])
 
-		const refusal = harness.events.find((event) => event.type === 'depth_exceeded')
+		const refusal = harness.events.find((event) => event.type === 'error' && event.kind === 'depth_exceeded')
 		expect(refusal).toBeDefined()
-		expect(refusal?.detail).toContain('exceeds the limit')
+		if (refusal?.type === 'error') expect(refusal.message).toContain('exceeds the limit')
 	})
 
 	test('refuses a delegation to a role that does not exist', async () => {
@@ -174,7 +175,7 @@ describe('createScheduler', () => {
 		const harness = createRun({ blueprint, provider })
 		await harness.run({ runId: 'run-1', task: 'go' })
 
-		expect(harness.events.some((event) => event.type === 'role_not_found')).toBe(true)
+		expect(harness.events.some((event) => event.type === 'error' && event.kind === 'role_not_found')).toBe(true)
 	})
 
 	test('records a branch and a commit for every worktree-isolated agent', async () => {

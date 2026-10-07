@@ -1,24 +1,11 @@
 /**
- * What a run produces, and what it reports while producing it.
+ * What a run produces.
+ *
+ * The event vocabulary lives in `runs/events.ts`, because the event log is the
+ * durable artifact and the scheduler is only one of its producers.
  */
 
 import type { ResultCard } from '../agent/types.ts'
-
-export type RunEventType =
-	| 'agent_start'
-	| 'agent_finish'
-	| 'commit'
-	| 'depth_exceeded'
-	| 'role_not_found'
-	| 'worktree_failed'
-
-export interface RunEvent {
-	readonly type: RunEventType
-	readonly agentId: string
-	readonly role: string
-	readonly parentId: string | null
-	readonly detail?: string
-}
 
 /** One agent's participation in a run. */
 export interface AgentNode {

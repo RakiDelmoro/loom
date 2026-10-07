@@ -8,6 +8,7 @@ import type { ToolRegistry } from '../tools/types.ts'
 import { runAgentLoop, type AgentLoopDependencies, type AgentLoopRequest } from './loop.ts'
 
 const request: AgentLoopRequest = {
+	agentId: 'test-0-1',
 	systemPrompt: 'You are a test role.',
 	task: 'do the thing',
 	profile: { provider: 'test', model: 'test-model', temperature: 0 },
@@ -22,6 +23,7 @@ function dependencies(provider: Provider, tools: ToolRegistry = createToolRegist
 		provider,
 		tools,
 		delegate: async () => ({ status: 'success', summary: 'child done' }),
+		events: () => {},
 		now: createCounterClock(),
 	}
 }
@@ -131,6 +133,7 @@ describe('runAgentLoop', () => {
 				seen.push(delegation)
 				return { status: 'success', summary: 'child says hi' }
 			},
+			events: () => {},
 			now: createCounterClock(),
 		}
 
@@ -155,6 +158,7 @@ describe('runAgentLoop', () => {
 				active -= 1
 				return { status: 'success', summary: 'child' }
 			},
+			events: () => {},
 			now: createCounterClock(),
 		}
 

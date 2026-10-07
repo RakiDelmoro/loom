@@ -56,6 +56,9 @@ export function createMemoryFileSystem(
 			writeTextFile(filePath: string, text: string): void {
 				files.set(filePath, text)
 			},
+			appendTextFile(filePath: string, text: string): void {
+				files.set(filePath, `${files.get(filePath) ?? ''}${text}`)
+			},
 			listDirectory,
 			isDirectory(dirPath: string): boolean {
 				return directories.has(dirPath)

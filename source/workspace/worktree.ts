@@ -12,13 +12,10 @@
 
 import * as path from 'node:path'
 import type { FileSystem } from '../fs.ts'
+import type { OpResult } from '../result.ts'
 import { ensureOrchestrationExcluded } from './exclude.ts'
 import type { GitRunner } from './git.ts'
 import { agentLocation, runWorktreeDirectory } from './naming.ts'
-
-export type WorktreeResult<T> =
-	| { readonly kind: 'ok'; readonly value: T }
-	| { readonly kind: 'failed'; readonly message: string }
 
 /** A worktree Loom created for one agent of one run. */
 export interface WorktreeRef {
@@ -46,17 +43,17 @@ export interface WorktreeManagerDependencies {
 
 export interface WorktreeManager {
 	/** Resolves a ref (e.g. `HEAD`) to a commit sha. */
-	resolveBaseSha(ref: string): WorktreeResult<string>
+	resolveBaseSha(ref: string): OpResult<string>
 	/** Creates an isolated worktree on its own branch, based on `baseSha`. */
-	create(runId: string, agentId: string, baseSha: string): WorktreeResult<CreatedWorktree>
+	create(runId: string, agentId: string, baseSha: string): OpResult<CreatedWorktree>
 	/** Commits the worktree's changes; `null` when there is nothing to commit. */
-	commit(worktree: WorktreeRef, message: string): WorktreeResult<string | null>
+	commit(worktree: WorktreeRef, message: string): OpResult<string | null>
 	/** Removes one worktree. Idempotent: an already-removed worktree is not an error. */
-	remove(worktree: WorktreeRef): WorktreeResult<null>
+	remove(worktree: WorktreeRef): OpResult<null>
 	/** Removes every worktree of a run, and optionally its branches. */
-	removeRun(runId: string, options: { readonly branches: boolean }): WorktreeResult<readonly string[]>
+	removeRun(runId: string, options: { readonly branches: boolean }): OpResult<readonly string[]>
 	/** The worktrees git currently knows about. */
-	list(): WorktreeResult<readonly WorktreeEntry[]>
+	list(): OpResult<readonly WorktreeEntry[]>
 }
 
 // Commits are attributed to Loom rather than to the operator: a headless run
@@ -98,7 +95,7 @@ export function createWorktreeManager(
 	const { git, fs } = dependencies
 	const { repoPath } = options
 
-	function resolveBaseSha(ref: string): WorktreeResult<string> {
+	function resolveBaseSha(ref: string): OpResult<string> {
 		const resolved = git.run(['rev-parse', ref])
 		if (resolved.kind !== 'ok') return { kind: 'failed', message: resolved.message }
 		const sha = resolved.stdout.trim()
@@ -106,13 +103,13 @@ export function createWorktreeManager(
 		return { kind: 'ok', value: sha }
 	}
 
-	function list(): WorktreeResult<readonly WorktreeEntry[]> {
+	function list(): OpResult<readonly WorktreeEntry[]> {
 		const listed = git.run(['worktree', 'list', '--porcelain'])
 		if (listed.kind !== 'ok') return { kind: 'failed', message: listed.message }
 		return { kind: 'ok', value: parseWorktreeList(listed.stdout) }
 	}
 
-	function create(runId: string, agentId: string, baseSha: string): WorktreeResult<CreatedWorktree> {
+	function create(runId: string, agentId: string, baseSha: string): OpResult<CreatedWorktree> {
 		const location = agentLocation(repoPath, runId, agentId)
 
 		// Best-effort visibility hygiene; a skip is not a reason to fail a run.
@@ -127,7 +124,7 @@ export function createWorktreeManager(
 		}
 	}
 
-	function commit(worktree: WorktreeRef, message: string): WorktreeResult<string | null> {
+	function commit(worktree: WorktreeRef, message: string): OpResult<string | null> {
 		const status = git.run(['-C', worktree.path, 'status', '--porcelain'])
 		if (status.kind !== 'ok') return { kind: 'failed', message: status.message }
 		if (status.stdout.trim() === '') return { kind: 'ok', value: null }
@@ -145,7 +142,7 @@ export function createWorktreeManager(
 		return { kind: 'ok', value: head.stdout.trim() }
 	}
 
-	function remove(worktree: WorktreeRef): WorktreeResult<null> {
+	function remove(worktree: WorktreeRef): OpResult<null> {
 		if (!fs.isDirectory(worktree.path)) {
 			// Already gone: prune the stale registration and report success, so
 			// cleanup is safe to run twice.
@@ -157,7 +154,7 @@ export function createWorktreeManager(
 		return { kind: 'ok', value: null }
 	}
 
-	function removeRun(runId: string, removeOptions: { readonly branches: boolean }): WorktreeResult<readonly string[]> {
+	function removeRun(runId: string, removeOptions: { readonly branches: boolean }): OpResult<readonly string[]> {
 		const listed = list()
 		if (listed.kind !== 'ok') return { kind: 'failed', message: listed.message }
 

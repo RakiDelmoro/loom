@@ -5,7 +5,7 @@
  * `FileSystem`, which is what keeps the fast test suite off the disk entirely.
  */
 
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs'
 import { describeError } from './errors.ts'
 import type { FileSystem, ListDirectoryResult, ReadTextFileResult } from './fs.ts'
 
@@ -23,6 +23,9 @@ export function createNodeFileSystem(): FileSystem {
 		},
 		writeTextFile(filePath: string, text: string): void {
 			writeFileSync(filePath, text, 'utf8')
+		},
+		appendTextFile(filePath: string, text: string): void {
+			appendFileSync(filePath, text, 'utf8')
 		},
 		listDirectory(dirPath: string): ListDirectoryResult {
 			if (!existsSync(dirPath)) return { kind: 'unreadable', message: 'directory does not exist' }

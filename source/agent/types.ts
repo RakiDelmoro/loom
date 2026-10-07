@@ -10,6 +10,10 @@ import type { Usage } from '../model/types.ts'
 
 export type ResultStatus = 'success' | 'error' | 'needs_clarification'
 
+export function isResultStatus(value: unknown): value is ResultStatus {
+	return value === 'success' || value === 'error' || value === 'needs_clarification'
+}
+
 export interface ResultError {
 	readonly kind: string
 	readonly message: string

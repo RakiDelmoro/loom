@@ -12,10 +12,11 @@ import type { ResultCard } from '../agent/types.ts'
 import type { LoadedBlueprint, LoadedRole } from '../blueprint/types.ts'
 import { routeRole } from '../model/router.ts'
 import type { Provider, ToolSpec } from '../model/types.ts'
+import type { RunEventSink } from '../runs/events.ts'
 import type { ToolRegistry } from '../tools/types.ts'
 import type { WorktreeManager, WorktreeRef } from '../workspace/worktree.ts'
 import { createLimitedProvider, createPool } from './pool.ts'
-import type { AgentNode, RunEvent, RunResult } from './types.ts'
+import type { AgentNode, RunResult } from './types.ts'
 
 const MAX_TURNS_PER_ROLE = 24
 
@@ -25,7 +26,7 @@ export interface SchedulerDependencies {
 	readonly worktrees: WorktreeManager
 	readonly blueprint: LoadedBlueprint
 	readonly now: () => number
-	readonly events: (event: RunEvent) => void
+	readonly events: RunEventSink
 }
 
 export interface SchedulerOptions {
@@ -68,10 +69,6 @@ export function createScheduler(
 		createPool({ maxConcurrent: blueprint.budgets.maxConcurrentAgents }),
 	)
 
-	function emit(type: RunEvent['type'], agentId: string, role: string, parentId: string | null, detail?: string): void {
-		dependencies.events({ type, agentId, role, parentId, ...(detail !== undefined ? { detail } : {}) })
-	}
-
 	/** Only the tools the role was granted, in the order the Blueprint declares them. */
 	function toolSpecsFor(role: LoadedRole): ToolSpec[] {
 		const granted = new Set(role.tools)
@@ -87,16 +84,20 @@ export function createScheduler(
 		parentId: string | null,
 		depth: number,
 	): Promise<ResultCard> {
+		// A refusal is attributed to the caller: it is the agent that asked for
+		// something the run would not allow.
+		const caller = parentId ?? 'run'
+
 		const role = blueprint.roles[roleName]
 		if (role === undefined) {
 			const message = `role "${roleName}" is not defined in the Blueprint`
-			emit('role_not_found', parentId ?? 'run', roleName, parentId, message)
+			dependencies.events({ type: 'error', agentId: caller, kind: 'role_not_found', message })
 			return errorCard('role_not_found', message)
 		}
 
 		if (depth > blueprint.budgets.maxAgentDepth) {
 			const message = `delegation depth ${String(depth)} exceeds the limit of ${String(blueprint.budgets.maxAgentDepth)}`
-			emit('depth_exceeded', parentId ?? 'run', roleName, parentId, message)
+			dependencies.events({ type: 'error', agentId: caller, kind: 'depth_exceeded', message })
 			return errorCard('depth_exceeded', message)
 		}
 
@@ -109,7 +110,7 @@ export function createScheduler(
 		if (role.isolation === 'worktree') {
 			const created = dependencies.worktrees.create(state.runId, agentId, state.baseSha)
 			if (created.kind !== 'ok') {
-				emit('worktree_failed', agentId, roleName, parentId, created.message)
+				dependencies.events({ type: 'error', agentId, kind: 'worktree_failed', message: created.message })
 				return errorCard('worktree_failed', created.message)
 			}
 			worktree = created.value
@@ -130,16 +131,18 @@ export function createScheduler(
 			sha: null,
 		}
 		state.agents.push(node)
-		emit('agent_start', agentId, roleName, parentId)
+		dependencies.events({ type: 'agent_start', agentId, role: roleName, parentId, depth })
 
 		const outcome = await runAgentLoop(
 			{
 				provider,
 				tools: dependencies.tools,
 				delegate: (request) => execute(state, request.role, request.task, agentId, depth + 1),
+				events: dependencies.events,
 				now: dependencies.now,
 			},
 			{
+				agentId,
 				systemPrompt: role.systemPrompt,
 				task,
 				profile: routeRole(blueprint, roleName),
@@ -156,16 +159,29 @@ export function createScheduler(
 			const committed = dependencies.worktrees.commit(worktree, `${roleName}: ${summaryLine}`)
 			if (committed.kind === 'ok') {
 				sha = committed.value
-				emit('commit', agentId, roleName, parentId, sha ?? 'no changes')
+				dependencies.events({ type: 'commit', agentId, branch: worktree.branch, sha })
 			} else {
-				emit('commit', agentId, roleName, parentId, `commit failed: ${committed.message}`)
+				dependencies.events({ type: 'error', agentId, kind: 'commit_failed', message: committed.message })
 			}
 		}
 
 		node.finishedAt = dependencies.now()
 		node.card = outcome.card
 		node.sha = sha
-		emit('agent_finish', agentId, roleName, parentId, outcome.card.status)
+		dependencies.events({
+			type: 'agent_finish',
+			agentId,
+			role: roleName,
+			parentId,
+			depth,
+			status: outcome.card.status,
+			summary: outcome.card.summary,
+			branch: node.branch,
+			sha,
+			startedAt: new Date(startedAt).toISOString(),
+			finishedAt: new Date(node.finishedAt).toISOString(),
+			usage: outcome.usage,
+		})
 
 		return outcome.card
 	}

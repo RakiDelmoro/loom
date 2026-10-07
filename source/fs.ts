@@ -23,6 +23,8 @@ export type ListDirectoryResult =
 export interface FileSystem {
 	readonly readTextFile: (filePath: string) => ReadTextFileResult
 	readonly writeTextFile: (filePath: string, text: string) => void
+	/** Appends without reading or rewriting, so an append-only log stays O(1) per line. */
+	readonly appendTextFile: (filePath: string, text: string) => void
 	readonly listDirectory: (dirPath: string) => ListDirectoryResult
 	readonly isDirectory: (dirPath: string) => boolean
 	readonly ensureDirectory: (dirPath: string) => void
