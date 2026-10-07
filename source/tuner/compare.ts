@@ -58,9 +58,16 @@ export function compare(baseline: SuiteResult, candidate: SuiteResult, options: 
 		}
 	}
 
-	// A baseline that spends nothing has no saving to find: every candidate would
-	// tie at zero, and each of them would look like a win.
-	if (baseline.costUsd > 0) {
+	// A cost win measured once is not a cost win.
+	//
+	// Run-to-run cost moves with how many turns the model chooses to take, and the
+	// variation is not small: a candidate that changed *nothing* — it set an option
+	// to the value it already had — measured 25% cheaper than the baseline it was
+	// identical to, clearing a 20% margin while a real 15% saving did not. Averaging
+	// is what separates a saving from that, and one repetition cannot average
+	// anything. The score rule has Wilson intervals for this; cost has only this.
+	const measurable = baseline.repetitions > 1
+	if (baseline.costUsd > 0 && measurable) {
 		const ceiling = baseline.costUsd * (1 - options.costMargin)
 		if (candidate.score >= baseline.score && candidate.costUsd < ceiling) {
 			const saved = ((1 - candidate.costUsd / baseline.costUsd) * 100).toFixed(0)
@@ -77,10 +84,20 @@ export function compare(baseline: SuiteResult, candidate: SuiteResult, options: 
 		}
 	}
 
+	// A saving that was visible but could not be confirmed is worth saying out loud,
+	// or it reads as the rule ignoring cost rather than distrusting the measurement.
+	const unconfirmed =
+		baseline.costUsd > 0 && !measurable && candidate.costUsd < baseline.costUsd
+			? [
+					`it came out cheaper ($${candidate.costUsd.toFixed(4)} against $${baseline.costUsd.toFixed(4)}), but with ${String(baseline.repetitions)} repetition that cannot be told from run-to-run variation`,
+				]
+			: []
+
 	return {
 		verdict: 'noise',
 		reasons: [
 			`the candidate scored ${candidate.score.toFixed(3)} against a baseline of ${baseline.score.toFixed(3)}, but its interval [${candidate.interval.low.toFixed(3)}, ${candidate.interval.high.toFixed(3)}] does not clear ${required.toFixed(3)}, and it costs $${candidate.costUsd.toFixed(4)} against $${baseline.costUsd.toFixed(4)}`,
+			...unconfirmed,
 		],
 	}
 }

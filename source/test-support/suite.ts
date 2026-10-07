@@ -11,6 +11,7 @@ export interface SuiteFixtureOptions {
 	/** Pass rate per benchmark, by name. */
 	readonly benchmarks?: Readonly<Record<string, number>>
 	readonly costUsd?: number
+	readonly repetitions?: number
 	readonly split?: Split
 }
 
@@ -41,7 +42,7 @@ export function createSuiteResult(options: SuiteFixtureOptions): SuiteResult {
 		suitePath: '/suite',
 		blueprintPath: '/guild/loom.json',
 		split: options.split ?? 'optimization',
-		repetitions: 1,
+		repetitions: options.repetitions ?? 1,
 		startedAt: '2026-10-07T00:00:00.000Z',
 		finishedAt: '2026-10-07T00:00:01.000Z',
 		benchmarks,
