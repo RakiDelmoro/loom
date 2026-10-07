@@ -88,14 +88,16 @@ Per candidate, against the baseline's **optimization** score:
 
 - **Regressed** — any benchmark the baseline passed and the candidate does not, whatever the mean says. Averaging hides exactly the damage a user would notice.
 - **Improved (score)** — the candidate's interval **lower bound** clears the baseline's measured score by at least `improvementMargin`. The pessimistic reading of the candidate still has to win.
-- **Improved (cost)** — no regression, a score at least as good, and a cost at least `costMargin` below the baseline's.
+- **Improved (cost)** — no regression, a score at least as good, and a cost at least `costMargin` below the baseline's — **and only with `repetitions` above 1**.
 - **Noise** — everything else.
 
 Regression is checked first, so a candidate can never buy a win by breaking something that already worked. Only `improved` candidates are eligible for merge.
 
 **Why there are two ways to win.** When the suite is harder than the model, pass rate is the axis and the interval rule is the whole defence against chasing variance. When the model is *stronger* than the suite — the baseline passes everything — pass rate cannot move, and the only thing left to improve is what the run spends. A score-only rule leaves the Tuner with nothing to optimize, and it is not hypothetical: routing both roles to a cheaper model scored **identically, for 2.6× less** ($0.0437 → $0.0166), and a score-only comparison called it noise and discarded it.
 
-The cost rule is guarded on both ends. A baseline that spends nothing has no saving to find, so every free candidate would otherwise look like a win; and the reason names the **latency** the saving cost, because cheaper is not free if it is much slower (`0.0437/189s` against `0.0166/669s` is the measured trade, and the operator reads it in the report rather than discovering it later).
+**Why cost needs repetitions, and score does not.** A score has a Wilson interval, so a single run still carries its own uncertainty and the rule can be pessimistic without more data. Cost has no interval — one number, varying with how many turns the model chose to take. That variation is not small. A candidate that changed *nothing* — it set an option to the value it already had — measured **25% cheaper** than the baseline it was identical to, cleared a 20% margin, and was promoted, while a genuine 15% saving in the same cycle was declined. Averaging is the only thing that separates a saving from that, and one repetition averages nothing. Below two repetitions a cheaper candidate is reported as **unconfirmed** rather than promoted, so the reason reads as the measurement being distrusted rather than as cost being ignored.
+
+The cost rule is guarded on both ends. A baseline that spends nothing has no saving to find, so every free candidate would otherwise look like a win; and the reason names the **latency** the saving cost, because cheaper is not free if it is much slower (`0.0437/189s` against `0.0166/669s` is one measured trade, and the operator reads it in the report rather than discovering it later).
 
 Once the accepted candidates are merged, the **merged** artifact is evaluated on the held-out split against the baseline's held-out score, by the same rule. Promotion requires `improved` there. Combining two good branches can still produce a bad one, so the merge is re-evaluated rather than assumed.
 
