@@ -54,15 +54,15 @@ Milestones are sequential: the isolation primitive must exist before the engine 
 
 1. **Tool registry + built-ins.** `agent`, `finish`, `read_file`, `write_file`, `list_dir`, `glob`, `search`, `run_shell`, `git_status`, `git_diff`, `git_log`. Path canonicalization confined to the worktree.
 2. **Agent loop.** Prompt assembly, model call, tool-call parsing, dispatch, result append, `finish` handling, implicit-finish on no tool calls.
-3. **Bounded pool scheduler.** `maxConcurrentAgents`, fan-out via `agent`, stable result ordering, `maxAgentDepth` guard, single-flight per worktree.
+3. **Bounded pool scheduler.** `maxConcurrentAgents` bounds in-flight *model calls* — bounding the agent instead would let a tree deadlock against its own limit, since a parent waiting on children would hold a slot. Fan-out via `agent` with a per-role ceiling; stable spawn-order results; a `maxAgentDepth` guard. Worktrees are single-flight by construction: one agent owns each.
 
 **Acceptance criteria.**
 
-- [ ] With a scripted fake provider, 4 agents run concurrently — asserted by overlapping start/end timestamps, not by wall-clock timing.
-- [ ] Each agent produces a distinct commit on its own branch.
-- [ ] A tool that throws becomes a structured error result; the run does not crash.
-- [ ] Exceeding `maxAgentDepth` is refused with a typed error and a logged event.
-- [ ] Result ordering is identical across runs regardless of completion order.
+- [x] With a scripted fake provider, 4 agents run concurrently — asserted by overlapping start/end timestamps, not by wall-clock timing.
+- [x] Each agent produces a distinct commit on its own branch.
+- [x] A tool that throws becomes a structured error result; the run does not crash.
+- [x] Exceeding `maxAgentDepth` is refused with a typed error and a logged event.
+- [x] Result ordering is identical across runs regardless of completion order.
 
 ---
 

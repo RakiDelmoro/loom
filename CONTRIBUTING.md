@@ -54,10 +54,10 @@ loom.json      the example Blueprint (roles, tools, routing, budgets, permission
 tools/         tool manifests, referenced by path from the Blueprint
 prompts/       role system prompts, referenced by path from the Blueprint
 plan/          the design documents and roadmap
-src/           the engine
+source/           the engine
 ```
 
-Inside `src/`, code is one of three things — a leaf, an orchestration function,
+Inside `source/`, code is one of three things — a leaf, an orchestration function,
 or a pure helper. The decision tree is in [`AGENTS.md`](AGENTS.md); put a new
 function in the right tier before writing it.
 
@@ -77,7 +77,7 @@ git and cannot be proven against a fake. That one agent's files are invisible to
 another is the entire point of the worktree manager, and only real git can
 demonstrate it. This lane runs against a throwaway repository in the temp
 directory, and every test in it is skipped unless `LOOM_GIT_TESTS=1` — which the
-script sets. Run it before trusting any change to `src/workspace/`.
+script sets. Run it before trusting any change to `source/workspace/`.
 
 ## Commits
 

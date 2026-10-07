@@ -1,9 +1,8 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { spawnSync } from 'node:child_process'
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import * as path from 'node:path'
 import { createNodeFileSystem } from '../node-fs.ts'
+import { createTemporaryRepository, gitOutput } from '../test-support/git-repository.ts'
 import { createGitRunner } from './git.ts'
 import { createWorktreeManager, type CreatedWorktree, type WorktreeManager } from './worktree.ts'
 
@@ -17,21 +16,6 @@ import { createWorktreeManager, type CreatedWorktree, type WorktreeManager } fro
  */
 const enabled = process.env['LOOM_GIT_TESTS'] === '1'
 const suite = enabled ? describe : describe.skip
-
-function git(cwd: string, args: readonly string[]): string {
-	const spawned = spawnSync('git', [...args], { cwd, encoding: 'utf8' })
-	if (spawned.status !== 0) throw new Error(`git ${args.join(' ')} failed: ${spawned.stderr ?? ''}`)
-	return spawned.stdout ?? ''
-}
-
-function createRepository(): string {
-	const repo = mkdtempSync(path.join(tmpdir(), 'loom-git-'))
-	git(repo, ['init', '-q', '-b', 'main'])
-	writeFileSync(path.join(repo, 'README.md'), 'base\n')
-	git(repo, ['add', '-A'])
-	git(repo, ['-c', 'user.name=Test', '-c', 'user.email=test@localhost', 'commit', '-q', '-m', 'initial'])
-	return repo
-}
 
 function createWorktreeOrThrow(manager: WorktreeManager, agentId: string, baseSha: string): CreatedWorktree {
 	const result = manager.create('run-1', agentId, baseSha)
@@ -48,7 +32,7 @@ suite('the worktree manager against real git', () => {
 	})
 
 	test('isolates three agents, commits each to its own branch, and cleans up completely', () => {
-		const repo = createRepository()
+		const repo = createTemporaryRepository()
 		cleanupPath = repo
 
 		const manager = createWorktreeManager(
@@ -87,18 +71,18 @@ suite('the worktree manager against real git', () => {
 		expect(new Set(shas).size).toBe(3)
 
 		// Each commit sits on its own branch and names the agent that made it.
-		expect(git(alice.path, ['rev-parse', '--abbrev-ref', 'HEAD']).trim()).toBe('loom/run-1/alice')
-		expect(git(alice.path, ['log', '-1', '--format=%B'])).toContain('Loom-Agent: alice')
-		expect(git(alice.path, ['log', '-1', '--format=%B'])).toContain('Loom-Run: run-1')
+		expect(gitOutput(alice.path, ['rev-parse', '--abbrev-ref', 'HEAD']).trim()).toBe('loom/run-1/alice')
+		expect(gitOutput(alice.path, ['log', '-1', '--format=%B'])).toContain('Loom-Agent: alice')
+		expect(gitOutput(alice.path, ['log', '-1', '--format=%B'])).toContain('Loom-Run: run-1')
 
 		// The base tree never moved: still on main, still without the agents' work.
-		expect(git(repo, ['rev-parse', '--abbrev-ref', 'HEAD']).trim()).toBe('main')
-		expect(git(repo, ['log', '--format=%s', 'main'])).not.toContain('work by alice')
-		expect(git(repo, ['status', '--porcelain']).trim()).toBe('')
+		expect(gitOutput(repo, ['rev-parse', '--abbrev-ref', 'HEAD']).trim()).toBe('main')
+		expect(gitOutput(repo, ['log', '--format=%s', 'main'])).not.toContain('work by alice')
+		expect(gitOutput(repo, ['status', '--porcelain']).trim()).toBe('')
 
 		// Bookkeeping is excluded, so `.loom/` never appears in git's view.
 		expect(readFileSync(path.join(repo, '.git', 'info', 'exclude'), 'utf8')).toContain('.loom/')
-		expect(git(repo, ['status', '--porcelain'])).not.toContain('.loom')
+		expect(gitOutput(repo, ['status', '--porcelain'])).not.toContain('.loom')
 
 		// Cleanup removes every worktree of the run and its branches.
 		const removed = manager.removeRun('run-1', { branches: true })
@@ -107,16 +91,16 @@ suite('the worktree manager against real git', () => {
 
 		expect(existsSync(alice.path)).toBe(false)
 		expect(existsSync(bob.path)).toBe(false)
-		expect(git(repo, ['worktree', 'list', '--porcelain'])).not.toContain('run-1')
-		expect(git(repo, ['branch', '--list', '--format=%(refname:short)'])).not.toContain('loom/run-1')
+		expect(gitOutput(repo, ['worktree', 'list', '--porcelain'])).not.toContain('run-1')
+		expect(gitOutput(repo, ['branch', '--list', '--format=%(refname:short)'])).not.toContain('loom/run-1')
 
 		// The repository is left pristine.
-		expect(git(repo, ['status', '--porcelain']).trim()).toBe('')
+		expect(gitOutput(repo, ['status', '--porcelain']).trim()).toBe('')
 		expect(existsSync(path.join(repo, 'alice.txt'))).toBe(false)
 	})
 
 	test('a worktree with no changes produces no commit', () => {
-		const repo = createRepository()
+		const repo = createTemporaryRepository()
 		cleanupPath = repo
 
 		const manager = createWorktreeManager(
@@ -131,7 +115,7 @@ suite('the worktree manager against real git', () => {
 	})
 
 	test('cleanup is safe to run twice', () => {
-		const repo = createRepository()
+		const repo = createTemporaryRepository()
 		cleanupPath = repo
 
 		const manager = createWorktreeManager(
@@ -144,6 +128,6 @@ suite('the worktree manager against real git', () => {
 
 		expect(manager.removeRun('run-1', { branches: true }).kind).toBe('ok')
 		expect(manager.removeRun('run-1', { branches: true }).kind).toBe('ok')
-		expect(git(repo, ['worktree', 'list', '--porcelain'])).not.toContain('run-1')
+		expect(gitOutput(repo, ['worktree', 'list', '--porcelain'])).not.toContain('run-1')
 	})
 })

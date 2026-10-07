@@ -11,9 +11,19 @@ export type ReadTextFileResult =
 	| { readonly kind: 'ok'; readonly text: string }
 	| { readonly kind: 'unreadable'; readonly message: string }
 
+export interface DirectoryEntry {
+	readonly name: string
+	readonly isDirectory: boolean
+}
+
+export type ListDirectoryResult =
+	| { readonly kind: 'ok'; readonly entries: readonly DirectoryEntry[] }
+	| { readonly kind: 'unreadable'; readonly message: string }
+
 export interface FileSystem {
 	readonly readTextFile: (filePath: string) => ReadTextFileResult
 	readonly writeTextFile: (filePath: string, text: string) => void
+	readonly listDirectory: (dirPath: string) => ListDirectoryResult
 	readonly isDirectory: (dirPath: string) => boolean
 	readonly ensureDirectory: (dirPath: string) => void
 }

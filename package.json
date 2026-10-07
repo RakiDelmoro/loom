@@ -5,13 +5,13 @@
 	"type": "module",
 	"description": "A git-native, concurrent, provider-agnostic multi-agent engine with a bench-driven tuner.",
 	"bin": {
-		"loom": "./src/cli.ts"
+		"loom": "./source/cli.ts"
 	},
 	"scripts": {
-		"loom": "bun src/cli.ts",
+		"loom": "bun source/cli.ts",
 		"typecheck": "bun --bun tsc --noEmit",
-		"test": "bun test src/",
-		"test:git": "LOOM_GIT_TESTS=1 bun test src/workspace/git.integration.test.ts"
+		"test": "bun test source/",
+		"test:git": "LOOM_GIT_TESTS=1 bun test integration.test"
 	},
 	"devDependencies": {
 		"@types/bun": "^1.2.0",

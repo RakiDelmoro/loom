@@ -6,5 +6,5 @@
 exact = true
 
 [test]
-# Tests are colocated with the sources they cover, under src/.
-root = "src"
+# Tests are colocated with the sources they cover, under source/.
+root = "source"

@@ -57,7 +57,7 @@ behaviour cannot be verified in memory. Those checks live in an opt-in
 integration lane guarded by an environment variable and run by their own script
 (`bun run test:git`), so the fast suite stays clean. The integration lane proves
 the property; the fast lane proves the logic around it. A change to
-`src/workspace/` is not trusted until both pass.
+`source/workspace/` is not trusted until both pass.
 
 ### Testable business logic
 
@@ -81,7 +81,7 @@ Never use `as Type` to silence the type checker. It hides real mismatches. If
 typecheck fails, the types are wrong — fix them.
 
 The one legitimate narrowing tool is a type guard, and the package has exactly
-one canonical object guard: `isRecord`, exported from `src/guards.ts`. Import it;
+one canonical object guard: `isRecord`, exported from `source/guards.ts`. Import it;
 never redefine it at a call site. It proves a value is a plain object, never what
 its fields are, so still check each field you read.
 
@@ -140,7 +140,7 @@ transformation, decision-making, sequencing.
 
 ### Not testable — do not write tests
 
-Thin integration glue: the CLI's `main`, `src/serve.ts`, the factory that wires
+Thin integration glue: the CLI's `main`, `source/serve.ts`, the factory that wires
 real leaves. Keep these as thin as possible so there is little logic in them
 worth testing.
 
@@ -171,8 +171,8 @@ Touch an external system: network, filesystem, subprocess, environment. **Not
 tested.** The thinnest possible wrapper. Exported as a **factory** that closes
 over configuration which does not vary per call.
 
-Examples: `src/cli.ts`'s `readTextFile`, the injected `fetch` in
-`src/model/openai.ts`.
+Examples: `source/cli.ts`'s `readTextFile`, the injected `fetch` in
+`source/model/openai.ts`.
 
 ### Orchestration functions
 
@@ -181,15 +181,15 @@ Sequence calls, make decisions, handle errors, branch. **Tested.** They receive 
 *directly* use. List each dependency explicitly in the function's own type; do
 not compose dependency types with `&`.
 
-Examples: `loadBlueprint` in `src/blueprint/load.ts`.
+Examples: `loadBlueprint` in `source/blueprint/load.ts`.
 
 ### Pure helper functions
 
 Parsing, validation, formatting, transformation, decision-making. **Tested.**
 Imported directly wherever needed and never injected.
 
-Examples: everything in `src/blueprint/parse.ts`, `parseChatCompletion` in
-`src/model/openai.ts`, `routeRole` in `src/model/router.ts`.
+Examples: everything in `source/blueprint/parse.ts`, `parseChatCompletion` in
+`source/model/openai.ts`, `routeRole` in `source/model/router.ts`.
 
 ### Decision tree
 
@@ -223,14 +223,17 @@ loom/
 ├── tools/             tool manifests referenced by the Blueprint
 ├── prompts/           role system prompts referenced by the Blueprint
 ├── plan/              the design and roadmap (documents, not code)
-└── src/
+└── source/
     ├── cli.ts         the `loom` command (glue)
     ├── errors.ts      ValidationError, describeError
     ├── fs.ts          the filesystem boundary (types only)
     ├── node-fs.ts     the real filesystem leaf
     ├── guards.ts      the canonical isRecord guard
+    ├── agent/         the agent loop and its result types
     ├── blueprint/     types, parsers, loader
     ├── model/         provider interface, fake, openai client, router
+    ├── scheduler/     the bounded pool and the agent-tree scheduler
+    ├── tools/         tool types, registry, and the built-in tools
     ├── workspace/     naming, git exclude, the git leaf, the worktree manager
     └── test-support/  shared test doubles (support code, not tests)
 ```
