@@ -1,0 +1,7 @@
+node_modules/
+
+# Loom's own bookkeeping when it operates on a repository (run manifests,
+# worktrees, tuner state). Never committed.
+.loom/
+
+*.log

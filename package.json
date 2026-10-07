@@ -1,0 +1,19 @@
+{
+	"name": "loom",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"description": "A git-native, concurrent, provider-agnostic multi-agent engine with a bench-driven tuner.",
+	"bin": {
+		"loom": "./src/cli.ts"
+	},
+	"scripts": {
+		"loom": "bun src/cli.ts",
+		"typecheck": "bun --bun tsc --noEmit",
+		"test": "bun test src/"
+	},
+	"devDependencies": {
+		"@types/bun": "^1.2.0",
+		"typescript": "^5.6.0"
+	}
+}

@@ -1,0 +1,10 @@
+# Bun configuration for Loom. https://bun.sh/docs/runtime/bunfig
+
+[install]
+# Pin exact versions in bun.lock: the dependency set is deliberately tiny and
+# must not drift silently.
+exact = true
+
+[test]
+# Tests are colocated with the sources they cover, under src/.
+root = "src"

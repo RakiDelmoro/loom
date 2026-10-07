@@ -1,0 +1,207 @@
+# Roadmap
+
+The work plan for Loom. Design lives in the sibling documents; this one plans the *work*.
+
+Milestones are sequential: the isolation primitive must exist before the engine can be concurrent; the engine before the bench; the bench before the tuner. Within a milestone, `bun run typecheck` and `bun test` are green at every close.
+
+---
+
+## M0 — Foundations
+
+**Goal.** A typed, testable skeleton: load and validate a Blueprint, resolve a role to a model profile, and call a provider — with a fake provider so everything is testable in memory.
+
+**Deliverables.**
+
+1. **Project scaffold.** `package.json`, `tsconfig.json`, `bunfig.toml`, directory layout, `AGENTS.md` (engineering rules), `CONTRIBUTING.md`.
+2. **Blueprint layer.** Types for roles/tools/routing/budgets/permissions; strict validators (unknown keys rejected at every level); a loader leaf. See [blueprint-format.md](blueprint-format.md).
+3. **Model layer.** A `Provider` interface with tool-calling; an `openai-compatible` client (covers OpenAI, llama.cpp, Ollama, vLLM, OpenRouter); a `fake` provider for tests; a pure router mapping role → profile. See [model-routing.md](model-routing.md).
+4. **CLI skeleton.** `loom blueprint validate <file>` and `loom --version`.
+
+**Acceptance criteria.**
+
+- [ ] `bun test` green; `bun run typecheck` clean.
+- [ ] `loom blueprint validate` accepts the example Blueprint and rejects a malformed one with a path-based error.
+- [ ] The router maps every role in the example Blueprint to a profile, with a unit test.
+- [ ] The `openai-compatible` client is tested against a fake `fetch` (no network).
+
+---
+
+## M1 — Isolation primitive (worktree per agent)
+
+**Goal.** Create and destroy isolated git worktrees safely. This is the foundation the whole thesis rests on. See [isolation.md](isolation.md).
+
+**Deliverables.**
+
+1. **Git leaf.** A factory over `git` subprocess calls (worktree add/remove/list, commit, branch, diff, rev-parse).
+2. **Worktree orchestration.** `create(runId, agentId, baseRef)`, `remove`, `list`, `commit`, `branchFor`, `pathFor`; deterministic naming; `.loom/` git-excluded following worktree `gitdir` links.
+3. **Cleanup on every exit path** — success, error, and interruption.
+
+**Acceptance criteria.**
+
+- [ ] An integration test creates 3 worktrees from a temp repo, writes distinct files, and commits to 3 branches.
+- [ ] Isolation is proven: a file written in worktree A is absent in worktree B and in the base.
+- [ ] Cleanup leaves no registered worktrees and no stray directories.
+- [ ] `.loom/` never appears in `git status`.
+
+---
+
+## M2 — Concurrent agent engine
+
+**Goal.** N agents run in parallel, each in its own worktree, each driven by a model tool-loop.
+
+**Deliverables.**
+
+1. **Tool registry + built-ins.** `agent`, `finish`, `read_file`, `write_file`, `list_dir`, `glob`, `search`, `run_shell`, `git_status`, `git_diff`, `git_log`. Path canonicalization confined to the worktree.
+2. **Agent loop.** Prompt assembly, model call, tool-call parsing, dispatch, result append, `finish` handling, implicit-finish on no tool calls.
+3. **Bounded pool scheduler.** `maxConcurrentAgents`, fan-out via `agent`, stable result ordering, `maxAgentDepth` guard, single-flight per worktree.
+
+**Acceptance criteria.**
+
+- [ ] With a scripted fake provider, 4 agents run concurrently — asserted by overlapping start/end timestamps, not by wall-clock timing.
+- [ ] Each agent produces a distinct commit on its own branch.
+- [ ] A tool that throws becomes a structured error result; the run does not crash.
+- [ ] Exceeding `maxAgentDepth` is refused with a typed error and a logged event.
+- [ ] Result ordering is identical across runs regardless of completion order.
+
+---
+
+## M3 — Git-native run lifecycle
+
+**Goal.** Every run is reviewable and reversible.
+
+**Deliverables.**
+
+1. **Run manifest** (`run.json`): status, agents, branches, commit shas, cost, timings, base ref.
+2. **Event log** (`events.jsonl`): append-only `agent_start`, `tool_call`, `commit`, `error`, `run_finished`.
+3. **CLI:** `loom status`, `loom diff [--agent]`, `loom merge --agent`, `loom undo`, `loom clean [--branches]`.
+4. **Autonomy level** — `auto` | `supervised` | `manual`, governing whether the operator approves a merge. See [isolation.md](isolation.md) "Who reviews, and who merges".
+
+**Acceptance criteria.**
+
+- [ ] An end-to-end run on a real repo yields branches whose `git diff` matches the manifest.
+- [ ] `loom diff` shows the union of all agents; `--agent` shows one.
+- [ ] `loom merge --agent` applies exactly one branch to the base.
+- [ ] `loom clean` restores the repo to a pristine worktree state.
+- [ ] `loom undo <runId>` restores the base branch to the run's recorded starting commit.
+- [ ] A crash mid-run leaves a resumable or cleanly-abandoned state, never a leaked worktree.
+
+---
+
+## M4 — Hybrid routing and cost budgets
+
+**Goal.** Cheap roles on local models, hard roles on cloud, with dollar accounting and hard budgets. See [model-routing.md](model-routing.md).
+
+**Deliverables.**
+
+1. **Provider registry** — named providers with credentials from the deployment file/environment, never the Blueprint.
+2. **Cost accounting** — per-model prices; per-agent and per-run token and dollar totals.
+3. **Budget enforcement** — soft warning at a threshold, hard stop at `maxCostUsd`; a `budget_exceeded` error card that unwinds cleanly.
+4. **Per-run overrides** — `--model-override role=profile`.
+
+**Acceptance criteria.**
+
+- [ ] Cost math is unit-tested (including cached/uncached input pricing).
+- [ ] A run crossing `maxCostUsd` halts with a typed error and no partial commit.
+- [ ] The manifest records which model served each role.
+
+---
+
+## M5 — Bench (evaluation)
+
+**Goal.** A number worth optimizing against. **This milestone is the moat.** See [bench.md](bench.md).
+
+**Deliverables.**
+
+1. **Benchmark format** — initial workspace, task text, validation spec, optional judge rubric, optional scripted human answers.
+2. **Runner** — each benchmark in its own isolated worktree/container, `repetitionsPerBenchmark` repetitions, deterministic validation plus an LLM judge for non-binary tasks.
+3. **Scoring** — pass rate with confidence bounds, plus cost and latency terms.
+4. **Regression tracking** — results persisted per run; a held-out split the tuner can never read.
+
+**Acceptance criteria.**
+
+- [ ] A suite of ≥5 real tasks runs end-to-end and emits a reproducible score.
+- [ ] A deliberately degraded Blueprint scores measurably lower than the baseline.
+- [ ] Scores include confidence bounds and are stable across repetitions.
+- [ ] The held-out split is enforced structurally, not by convention.
+
+---
+
+## M6 — Tuner (the loop)
+
+**Goal.** The idea made true: a closed loop that improves the Blueprint. See [tuner.md](tuner.md).
+
+**Deliverables.**
+
+1. **The loop** — observe → hypothesize → branch → evaluate → score → merge → report → promote → repeat, under guardrails.
+2. **Guardrails** — cycle budget, cost budget, plateau detection; no-op and regression rejection.
+3. **Held-out gate** — promotion requires improvement on the held-out split.
+
+**Acceptance criteria.**
+
+- [ ] A full cycle runs end-to-end and produces a report.
+- [ ] A candidate improving the baseline by the configured margin is promoted; a regressing candidate never is.
+- [ ] A hypothesis producing an invalid Blueprint is dropped with the reason recorded.
+- [ ] Held-out gating blocks a candidate that overfits the tuning split.
+
+---
+
+## M7 — Safety and control
+
+**Goal.** Deployable trust. See [security.md](security.md).
+
+**Deliverables.** Permission modes; approval gates for `run_shell` and commits; sandboxed command execution; egress allowlist; secret redaction; audit log; plan-approval and live steering.
+
+**Acceptance criteria.**
+
+- [ ] `read-only` mode blocks every mutating tool with a structured denial; the run continues.
+- [ ] A denied command never reaches the shell (asserted, not assumed).
+- [ ] No credential appears in any transcript or log (leak test).
+- [ ] An operator can pause a run, edit the plan, and resume.
+
+---
+
+## M8 — Surfaces
+
+**Goal.** Human control and visibility. See [surfaces.md](surfaces.md).
+
+**Deliverables.** HTTP API + web UI (run list, live run view, **diff review**, cost/latency/trace dashboard); run search/filter; authentication; OpenTelemetry tracing.
+
+**Acceptance criteria.**
+
+- [ ] A run is startable, watchable, reviewable (diff), and revertible from the UI.
+- [ ] Traces expose agent → turn → tool spans with per-span cost.
+- [ ] The UI works without a JavaScript build step, or with exactly one documented build step.
+
+---
+
+## Tracked technical debt
+
+No debt is currently tracked.
+
+When you add a row, also update the target milestone's deliverables to describe the removal work. When you remove the debt, delete the row.
+
+---
+
+## Backlog
+
+Unbuilt features. None is scheduled; each needs a fresh scoping before work begins.
+
+- **MCP client.** Let external MCP servers contribute tools without forking the engine. Highest-value ecosystem item.
+- **Project memory and retrieval.** Per-repo conventions, architecture map, and failure post-mortems, retrieved into context. Runs are amnesiac today.
+- **Best-of-N and speculative execution.** First-class strategies on top of the pool.
+- **Model-assisted merge conflict resolution.** Builds on M3's explicit merge.
+- **Blueprint authoring surface.** View/diff/A-B a Blueprint; a prompt registry and versioning.
+- **Dollar dashboards and pricing sources.**
+- **Multi-user and hosted control plane.** Auth exists in M8; tenancy does not.
+- **Mobile.** Desktop-first by design.
+- **Response caching / prefix reuse.**
+
+---
+
+## Open decisions (resolve before or during M0)
+
+1. **Name.** "Loom" is a placeholder; renaming is cheap until paths freeze in M0.
+2. **Sandbox boundary.** bubblewrap vs gVisor vs container for command execution (M7). Affects portability and the bench's per-benchmark isolation (M5).
+3. **Bench execution.** Worktree only, or container per benchmark? Container isolation is stronger but heavier.
+4. **Tuner home.** In-repo module, or a separate program consuming the engine's HTTP API only?
+5. **Auth model.** Local single-user with a token, or full accounts (M8)?
