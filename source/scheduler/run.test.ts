@@ -18,6 +18,7 @@ import type { RunResult } from './types.ts'
 interface RunHarness {
 	readonly run: (request: { runId: string; task: string }) => Promise<RunResult>
 	readonly events: RunEvent[]
+	readonly worktrees: FakeWorktrees
 }
 
 function createRun(options: {
@@ -30,11 +31,12 @@ function createRun(options: {
 	readonly modelOverrides?: Readonly<Record<string, string>>
 }): RunHarness {
 	const events: RunEvent[] = []
+	const worktrees = options.worktrees ?? createFakeWorktrees()
 	const scheduler = createScheduler(
 		{
 			providers: createFakeRegistry(options.provider),
 			tools: options.tools ?? createToolRegistry([]),
-			worktrees: options.worktrees ?? createFakeWorktrees(),
+			worktrees,
 			blueprint: options.blueprint,
 			now: options.now ?? createCounterClock(),
 			monotonicNow: createCounterClock(),
@@ -48,7 +50,7 @@ function createRun(options: {
 			approvals: [],
 		},
 	)
-	return { run: (request) => scheduler.run(request), events }
+	return { run: (request) => scheduler.run(request), events, worktrees }
 }
 
 /** The system prompt carries the role's identity, so a fake can tell roles apart. */
@@ -155,6 +157,102 @@ describe('createScheduler', () => {
 			.sort((left, right) => left.finishedAt - right.finishedAt)
 			.map((worker) => worker.agentId)
 		expect(byCompletion).not.toEqual(workers.map((worker) => worker.agentId))
+	})
+
+	test('a child’s committed work is integrated into its caller’s workspace', async () => {
+		const blueprint = createTestBlueprint({
+			orchestrator: { tools: ['agent'], maxChildren: 1 },
+			worker: { tools: [], isolation: 'worktree' },
+		})
+
+		const provider = createFakeProvider((request) => {
+			if (systemOf(request).includes('worker')) {
+				return toolCallResponse([call('w', 'finish', { status: 'success', summary: 'done' })])
+			}
+			if (!sawToolResult(request)) return toolCallResponse([call('c', 'agent', { role: 'worker', task: 'work' })])
+			return toolCallResponse([call('f', 'finish', { status: 'success', summary: 'done' })])
+		})
+
+		const harness = createRun({ blueprint, provider })
+		await harness.run({ runId: 'run-1', task: 'go' })
+
+		// Into the caller's tree — not the base repository, which is what a
+		// `shared` role used to be handed and why review was impossible.
+		expect(harness.worktrees.integrated).toEqual([
+			'loom/run-1/worker-1-2 -> /repo/.loom/worktrees/run-1/orchestrator-0-1',
+		])
+		expect(harness.events.filter((event) => event.type === 'integration')).toEqual([
+			{
+				type: 'integration',
+				agentId: 'worker-1-2',
+				branch: 'loom/run-1/worker-1-2',
+				into: '/repo/.loom/worktrees/run-1/orchestrator-0-1',
+				status: 'merged',
+				message: '',
+			},
+		])
+	})
+
+	test('a shared role works in its caller’s tree, not the base repository', async () => {
+		const blueprint = createTestBlueprint({
+			orchestrator: { tools: ['agent'], maxChildren: 1 },
+			// A worktree child of a shared child: its integration target is the
+			// shared child's workspace, which must be the orchestrator's tree.
+			reviewer: { tools: ['agent'], maxChildren: 1, isolation: 'shared' },
+			worker: { tools: [], isolation: 'worktree' },
+		})
+
+		const provider = createFakeProvider((request) => {
+			const system = systemOf(request)
+			if (system.includes('worker')) {
+				return toolCallResponse([call('w', 'finish', { status: 'success', summary: 'done' })])
+			}
+			if (system.includes('reviewer')) {
+				if (!sawToolResult(request)) return toolCallResponse([call('c', 'agent', { role: 'worker', task: 'work' })])
+				return toolCallResponse([call('f', 'finish', { status: 'success', summary: 'done' })])
+			}
+			if (!sawToolResult(request)) return toolCallResponse([call('r', 'agent', { role: 'reviewer', task: 'review' })])
+			return toolCallResponse([call('f', 'finish', { status: 'success', summary: 'done' })])
+		})
+
+		const harness = createRun({ blueprint, provider })
+		await harness.run({ runId: 'run-1', task: 'go' })
+
+		// The worker is the reviewer's child, and the reviewer shares the
+		// orchestrator's tree — so that is where the worker's work lands.
+		expect(harness.worktrees.integrated).toEqual([
+			'loom/run-1/worker-2-3 -> /repo/.loom/worktrees/run-1/orchestrator-0-1',
+		])
+	})
+
+	test('a caller is told when its child’s work could not be integrated', async () => {
+		const blueprint = createTestBlueprint({
+			orchestrator: { tools: ['agent'], maxChildren: 1 },
+			worker: { tools: [], isolation: 'worktree' },
+		})
+
+		const provider = createFakeProvider((request) => {
+			if (systemOf(request).includes('worker')) {
+				return toolCallResponse([call('w', 'finish', { status: 'success', summary: 'done' })])
+			}
+			if (!sawToolResult(request)) return toolCallResponse([call('c', 'agent', { role: 'worker', task: 'work' })])
+
+			// The caller can act on the conflict only if it can see it, so the run
+			// succeeds only when the delegation result carries it.
+			const seen = request.messages
+				.filter((message) => message.role === 'tool')
+				.map((message) => message.content)
+				.join('\n')
+			const told = seen.includes('"kind":"conflict"')
+			return toolCallResponse([
+				call('f', 'finish', { status: told ? 'success' : 'error', summary: told ? 'saw the conflict' : 'not told' }),
+			])
+		})
+
+		const harness = createRun({ blueprint, provider, worktrees: createFakeWorktrees({ integrationConflict: true }) })
+		const result = await harness.run({ runId: 'run-1', task: 'go' })
+
+		expect(result.card.summary).toBe('saw the conflict')
 	})
 
 	test('refuses a delegation past the depth limit and logs the refusal', async () => {

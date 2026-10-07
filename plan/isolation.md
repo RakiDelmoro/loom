@@ -120,8 +120,21 @@ Agents branch from the same pinned sha, so their results are independent until m
 - Conflicts are surfaced with the file list and left unresolved. Silent auto-resolution is forbidden; model-assisted resolution is a backlog item.
 - An Blueprint may declare an **integration role** that runs after the fan-out and is responsible for merging accepted branches and resolving conflicts — but it merges through the same explicit primitives, and its merges are commits like any other.
 
-### Who reviews, and who merges
+### Work flows up the delegation tree
 
+A child's committed branch is merged into **its caller's workspace** the moment the child returns, before the caller sees the result card. The card records whether that worked, so a caller can tell a sub-task it can build on from one whose changes did not land.
+
+Three things follow from it, and they are the reason it is not optional:
+
+1. **A caller can build on its children.** An orchestrator that cannot see what its coder produced is not orchestrating; it is guessing.
+2. **A `shared` role can do its job.** `shared` means *the caller's tree* — not the base repository. A reviewer that shares the orchestrator's workspace sees exactly what the orchestrator sees, which is what "review" means.
+3. **The base stays untouched during the run** whenever the entry role is `worktree`-isolated, because the chain of integrations terminates at the entry role's tree. Landing work in the base remains the end-of-run merge's job, and only `auto` autonomy does it.
+
+Integrations into one workspace are serialized: siblings finish concurrently, and two merges into one working tree would race. A merge that would conflict is refused and aborted rather than left half-applied — the caller is working in that tree.
+
+**This was not true until a real model found it.** `shared` originally meant the base repository, and child branches merged only at the end of the run. So a `reviewer` — `shared`, and therefore sitting in the base — could never see a coder's work, reported "the change did not land", and the orchestrator retried until a coder wrote into the base through a shell to make the review pass. The record shows four coders on a one-line bugfix, three failed reviews, and a benchmark that scored the escape as a success.
+
+### Who reviews, and who merges
 A branch per agent is a **safety net and a merge point**, not an obligation on the operator. The default path is autonomous:
 
 1. **Reviewer agents** inspect each branch — read-only tools, ideally a different model from the writer, so blind spots are not correlated.

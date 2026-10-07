@@ -39,7 +39,10 @@ suite('the scheduler against real git', () => {
 
 		const blueprint = createTestBlueprint(
 			{
-				orchestrator: { tools: ['agent'], maxChildren: 2, isolation: 'shared' },
+				// The orchestrator is worktree-isolated, as the shipped Blueprint has it,
+				// so a child's work stops at the orchestrator's tree and never reaches
+				// the base during the run.
+				orchestrator: { tools: ['agent'], maxChildren: 2 },
 				worker: { tools: ['write_file'], isolation: 'worktree' },
 			},
 			{ entryRole: 'orchestrator', maxConcurrentAgents: 4 },
@@ -98,5 +101,86 @@ suite('the scheduler against real git', () => {
 		expect(existsSync(path.join(repo, 'bob.txt'))).toBe(false)
 		expect(existsSync(path.join(repo, '.loom/worktrees/run-1/worker-1-2/alice.txt'))).toBe(true)
 		expect(existsSync(path.join(repo, '.loom/worktrees/run-1/worker-1-3/bob.txt'))).toBe(true)
+
+		// And the caller has both: a child's work travels to the agent that asked
+		// for it, which is what lets the caller build on it — and what lets a
+		// `shared` reviewer see it at all.
+		const orchestratorTree = path.join(repo, '.loom/worktrees/run-1/orchestrator-0-1')
+		expect(existsSync(path.join(orchestratorTree, 'alice.txt'))).toBe(true)
+		expect(existsSync(path.join(orchestratorTree, 'bob.txt'))).toBe(true)
+	})
+
+	test('a shared role sees the work a sibling committed', async () => {
+		// The defect this defends against: planner and reviewer are `shared`, so
+		// they worked in the BASE repository while the coder worked in a worktree.
+		// The reviewer could never see the work it was asked to review, reported
+		// "the change did not land", and the orchestrator retried until a coder
+		// gave up and wrote into the base through a shell.
+		const repo = createTemporaryRepository()
+		cleanupPath = repo
+		const fs = createNodeFileSystem()
+
+		const blueprint = createTestBlueprint(
+			{
+				orchestrator: { tools: ['agent'], maxChildren: 1 },
+				coder: { tools: ['write_file'], isolation: 'worktree' },
+				reviewer: { tools: ['read_file'], isolation: 'shared' },
+			},
+			{ entryRole: 'orchestrator', maxConcurrentAgents: 2 },
+		)
+
+		const provider = createFakeProvider((request) => {
+			const system = request.messages[0]?.content ?? ''
+			const sawToolResult = request.messages.some((message) => message.role === 'tool')
+
+			if (system.includes('coder') && !sawToolResult) {
+				return toolCallResponse([call('w', 'write_file', { path: 'clamp.ts', content: 'const CAUSE = 42\n' })])
+			}
+			if (system.includes('coder')) {
+				return toolCallResponse([call('f', 'finish', { status: 'success', summary: 'wrote clamp.ts' })])
+			}
+			if (system.includes('reviewer') && !sawToolResult) {
+				return toolCallResponse([call('r', 'read_file', { path: 'clamp.ts' })])
+			}
+			if (system.includes('reviewer')) {
+				// The reviewer reports what it could actually read, so the assertion
+				// below is about what it saw rather than about what it was told.
+				const seen = request.messages
+					.filter((message) => message.role === 'tool')
+					.map((message) => message.content)
+					.join('\n')
+				return toolCallResponse([
+					call('f', 'finish', {
+						status: seen.includes('CAUSE = 42') ? 'success' : 'error',
+						summary: seen.includes('CAUSE = 42') ? 'the change is present' : 'the change did not land',
+					}),
+				])
+			}
+			if (!sawToolResult) return toolCallResponse([call('c', 'agent', { role: 'coder', task: 'write clamp.ts' })])
+			return toolCallResponse([call('r', 'agent', { role: 'reviewer', task: 'review clamp.ts' })])
+		})
+
+		const scheduler = createScheduler(
+			{
+				providers: createFakeRegistry(provider),
+				tools: createToolRegistry(createWorkspaceToolHandlers({ fs })),
+				worktrees: createWorktreeManager({ git: createGitRunner({ cwd: repo }), fs }, { repoPath: repo }),
+				blueprint,
+				now: createCounterClock(),
+				monotonicNow: createCounterClock(),
+				events: () => {},
+				control: createRunControl(),
+			},
+			{ repoPath: repo, prices: {}, modelOverrides: {}, approvals: [] },
+		)
+
+		const result = await scheduler.run({ runId: 'run-2', task: 'write and review clamp.ts' })
+
+		const reviewer = result.agents.find((agent) => agent.role === 'reviewer')
+		expect(reviewer?.card.status).toBe('success')
+		expect(reviewer?.card.summary).toBe('the change is present')
+
+		// The coder's own branch still exists, and the base was never touched.
+		expect(existsSync(path.join(repo, 'clamp.ts'))).toBe(false)
 	})
 })

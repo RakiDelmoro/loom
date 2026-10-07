@@ -51,7 +51,7 @@ Validated strictly: **unknown keys are rejected at every level**, so a typo fail
 | `prompt` | yes | Path to a Markdown system prompt, relative to the Blueprint file. |
 | `model` | yes | A routing **profile name**. Never a concrete model id. |
 | `tools` | yes | Tool names this role may call. A role sees only these. |
-| `isolation` | no (default `worktree`) | `worktree` (own branch/tree) or `shared` (the base tree, for read-only roles). |
+| `isolation` | no (default `worktree`) | `worktree` (own branch and tree) or `shared` (**the caller's tree**, for read-only roles). |
 | `parallel` | no | `maxChildren` — how many `agent` children this role may run at once. Default 1. |
 | `styleGuide` | no | Path to a shared style file appended to the prompt at load time. |
 | `label` / `description` / `workingLabel` | no | Display metadata in three tiers (`detailed`, `friendly`, `whimsical`) for the UI. |

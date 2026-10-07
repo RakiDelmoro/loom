@@ -48,6 +48,8 @@ export interface WorktreeManager {
 	create(runId: string, agentId: string, baseSha: string): OpResult<CreatedWorktree>
 	/** Commits the worktree's changes; `null` when there is nothing to commit. */
 	commit(worktree: WorktreeRef, message: string): OpResult<string | null>
+	/** Merges `branch` into the working tree at `into`. The target must be clean. */
+	integrate(into: string, branch: string): OpResult<null>
 	/** Removes one worktree. Idempotent: an already-removed worktree is not an error. */
 	remove(worktree: WorktreeRef): OpResult<null>
 	/** Removes every worktree of a run, and optionally its branches. */
@@ -142,6 +144,44 @@ export function createWorktreeManager(
 		return { kind: 'ok', value: head.stdout.trim() }
 	}
 
+	/**
+	 * Brings a branch into the working tree at `into`.
+	 *
+	 * This is how a child's work reaches its caller: the child commits to its own
+	 * branch, and that branch is merged into the workspace the caller is working
+	 * in. Without it a parent cannot build on a child's result — and a `shared`
+	 * role, which works in its caller's workspace, cannot review it either.
+	 *
+	 * The target must be clean. A merge started on a dirty tree is a merge that
+	 * cannot be safely aborted, so this refuses instead of risking the caller's
+	 * uncommitted work.
+	 */
+	function integrate(into: string, branch: string): OpResult<null> {
+		const status = git.run(['-C', into, 'status', '--porcelain'])
+		if (status.kind !== 'ok') return { kind: 'failed', message: status.message }
+		if (status.stdout.trim() !== '') {
+			return { kind: 'failed', message: 'the workspace has uncommitted changes, so a merge into it would not be safe' }
+		}
+
+		const merged = git.run([
+			...COMMIT_IDENTITY,
+			'-C',
+			into,
+			'merge',
+			'--no-ff',
+			'--no-edit',
+			'-m',
+			`Loom: integrate ${branch}`,
+			branch,
+		])
+		if (merged.kind === 'ok') return { kind: 'ok', value: null }
+
+		// A conflict must not leave the caller mid-merge: it is working in this
+		// tree, and a half-applied merge would corrupt everything after it.
+		git.run(['-C', into, 'merge', '--abort'])
+		return { kind: 'failed', message: merged.message }
+	}
+
 	function remove(worktree: WorktreeRef): OpResult<null> {
 		if (!fs.isDirectory(worktree.path)) {
 			// Already gone: prune the stale registration and report success, so
@@ -179,5 +219,5 @@ export function createWorktreeManager(
 		return { kind: 'ok', value: removedPaths }
 	}
 
-	return { resolveBaseSha, create, commit, remove, removeRun, list }
+	return { resolveBaseSha, create, commit, integrate, remove, removeRun, list }
 }

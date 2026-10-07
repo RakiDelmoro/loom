@@ -78,6 +78,8 @@ interface RunState {
 	tokens: number
 	costAlertFired: boolean
 	tokenAlertFired: boolean
+	/** One integration at a time per workspace; siblings finish concurrently. */
+	readonly integrations: Map<string, Promise<void>>
 }
 
 export function createScheduler(
@@ -101,6 +103,35 @@ export function createScheduler(
 			.map((manifest) => ({ name: manifest.name, description: manifest.description, parameters: manifest.parameters }))
 	}
 
+	/**
+	 * Runs `body` with no other integration in flight against the same workspace.
+	 *
+	 * Siblings finish concurrently — a parent may delegate to three children at
+	 * once — and two merges into one working tree would race. The queue is per
+	 * workspace because that is the resource being contended for.
+	 */
+	async function withWorkspaceLock<T>(
+		state: RunState,
+		workspace: string,
+		body: () => T | Promise<T>,
+	): Promise<T> {
+		const previous = state.integrations.get(workspace) ?? Promise.resolve()
+		const next = previous.then(
+			() => body(),
+			() => body(),
+		)
+		// Stored already-settled: the queue is only ever used for ordering, and a
+		// failed integration must not reject the next waiter.
+		state.integrations.set(
+			workspace,
+			next.then(
+				() => undefined,
+				() => undefined,
+			),
+		)
+		return next
+	}
+
 	/** An alert fires at most once per kind, and never stops anything. */
 	function checkAlerts(state: RunState): void {
 		const { alerts } = blueprint
@@ -120,6 +151,12 @@ export function createScheduler(
 		task: string,
 		parentId: string | null,
 		depth: number,
+		/**
+		 * The workspace the caller is working in. A `shared` role works here too —
+		 * sharing means sharing *the caller's* tree, not the base repository, which
+		 * is what makes a reviewer able to see the work it was asked to review.
+		 */
+		callerWorkspace: string,
 	): Promise<ResultCard> {
 		// A refusal is attributed to the caller: it is the agent that asked for
 		// something the run would not allow.
@@ -149,7 +186,7 @@ export function createScheduler(
 		const agentId = `${roleName}-${String(depth)}-${String(state.counter)}`
 		const startedAt = dependencies.now()
 
-		let workspaceRoot = options.repoPath
+		let workspaceRoot = callerWorkspace
 		let worktree: WorktreeRef | null = null
 		if (role.isolation === 'worktree') {
 			const worktreeResult = dependencies.worktrees.create(state.runId, agentId, state.baseSha)
@@ -183,7 +220,7 @@ export function createScheduler(
 				tools: dependencies.tools,
 				policy,
 				control: dependencies.control,
-				delegate: (request) => execute(state, request.role, request.task, agentId, depth + 1),
+				delegate: (request) => execute(state, request.role, request.task, agentId, depth + 1, workspaceRoot),
 				events: dependencies.events,
 				now: dependencies.now,
 				monotonicNow: dependencies.monotonicNow,
@@ -217,8 +254,32 @@ export function createScheduler(
 			}
 		}
 
+		// The child's work travels to the caller. A sub-task whose result cannot be
+		// seen by the agent that asked for it is not a sub-task the caller can use,
+		// so this happens before the card is returned rather than at the end of the
+		// run. A `shared` role works in the caller's tree, which is why it is now
+		// able to review a sibling's work at all.
+		let card = outcome.card
+		if (worktree !== null && sha !== null && parentId !== null) {
+			const integrated = await withWorkspaceLock(state, callerWorkspace, () =>
+				dependencies.worktrees.integrate(callerWorkspace, worktree.branch),
+			)
+			const ok = integrated.kind === 'ok'
+			dependencies.events({
+				type: 'integration',
+				agentId,
+				branch: worktree.branch,
+				into: callerWorkspace,
+				status: ok ? 'merged' : 'conflict',
+				message: ok ? '' : integrated.message,
+			})
+			card = ok
+				? { ...card, integration: { kind: 'merged' } }
+				: { ...card, integration: { kind: 'conflict', message: integrated.message } }
+		}
+
 		node.finishedAt = dependencies.now()
-		node.card = outcome.card
+		node.card = card
 		node.sha = sha
 		dependencies.events({
 			type: 'agent_finish',
@@ -241,7 +302,7 @@ export function createScheduler(
 		state.tokens += outcome.usage.inputTokens + outcome.usage.outputTokens
 		checkAlerts(state)
 
-		return outcome.card
+		return card
 	}
 
 	return {
@@ -265,8 +326,9 @@ export function createScheduler(
 				tokens: 0,
 				costAlertFired: false,
 				tokenAlertFired: false,
+				integrations: new Map(),
 			}
-			const card = await execute(state, blueprint.entryRole, request.task, null, 0)
+			const card = await execute(state, blueprint.entryRole, request.task, null, 0, options.repoPath)
 
 			return {
 				runId: request.runId,

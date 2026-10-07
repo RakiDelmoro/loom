@@ -33,6 +33,15 @@ export type RunEvent =
 	  }
 	| { readonly type: 'commit'; readonly agentId: string; readonly branch: string; readonly sha: string | null }
 	| {
+			/** A child's committed branch merged into the workspace its caller works in. */
+			readonly type: 'integration'
+			readonly agentId: string
+			readonly branch: string
+			readonly into: string
+			readonly status: 'merged' | 'conflict'
+			readonly message: string
+	  }
+	| {
 			readonly type: 'agent_finish'
 			readonly agentId: string
 			readonly role: string

@@ -73,7 +73,7 @@ Milestones are sequential: the isolation primitive must exist before the engine 
 **Deliverables.**
 
 1. **Run manifest** (`run.json`): status, agents, branches, commit shas, token usage, timings, and the base ref and commit. Rewritten as each agent finishes, so a run killed mid-flight still leaves a manifest naming every agent that ran.
-2. **Event log** (`events.jsonl`): append-only `run_started`, `agent_start`, `tool_call`, `tool_result`, `commit`, `agent_finish`, `error`, `run_finished`. Never rewritten, so it stays truthful when a run is killed.
+2. **Event log** (`events.jsonl`): append-only `run_started`, `agent_start`, `model_call`, `tool_call`, `tool_result`, `commit`, `integration`, `agent_finish`, `operator_notice`, `alert`, `error`, `run_finished`. Never rewritten, so it stays truthful when a run is killed.
 3. **CLI:** `loom run`, `loom runs`, `loom status`, `loom diff [--agent]`, `loom merge --agent`, `loom undo`, `loom clean [--branches]`.
 4. **Autonomy level** — `auto` | `supervised` | `manual`. `auto` merges the run's branches when it finishes successfully; `supervised` and `manual` leave merging to the operator. See [isolation.md](isolation.md) "Who reviews, and who merges".
 

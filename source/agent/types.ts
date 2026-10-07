@@ -25,7 +25,19 @@ export interface ResultCard {
 	readonly summary: string
 	readonly artifacts?: readonly string[]
 	readonly error?: ResultError
+	/**
+	 * Whether the agent's committed work reached its caller's workspace. Absent
+	 * when the agent committed nothing, because there is nothing to carry.
+	 *
+	 * A caller needs this: a sub-task whose changes could not be integrated is not
+	 * one the caller can build on, however well the sub-task itself went.
+	 */
+	readonly integration?: Integration
 }
+
+export type Integration =
+	| { readonly kind: 'merged' }
+	| { readonly kind: 'conflict'; readonly message: string }
 
 export interface AgentOutcome {
 	readonly card: ResultCard
