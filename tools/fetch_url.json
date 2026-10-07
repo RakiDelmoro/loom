@@ -1,0 +1,12 @@
+{
+	"name": "fetch_url",
+	"description": "Fetch a document over HTTP or HTTPS. The host must be on the run's egress allowlist.",
+	"parameters": {
+		"type": "object",
+		"properties": {
+			"url": { "type": "string", "description": "The absolute URL to fetch." }
+		},
+		"required": ["url"],
+		"additionalProperties": false
+	}
+}

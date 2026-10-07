@@ -42,6 +42,7 @@ function createRun(options: {
 			repoPath: '/repo',
 			prices: options.prices ?? {},
 			modelOverrides: options.modelOverrides ?? {},
+			approvals: [],
 		},
 	)
 	return { run: (request) => scheduler.run(request), events }

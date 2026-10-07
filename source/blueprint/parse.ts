@@ -49,7 +49,7 @@ const PARALLEL_KEYS = ['maxChildren'] as const
 const ROUTING_KEYS = ['provider', 'model', 'temperature', 'maxTokens'] as const
 const BUDGET_KEYS = ['maxAgentDepth', 'maxConcurrentAgents', 'toolTimeoutSeconds'] as const
 const ALERT_KEYS = ['costUsd', 'tokens'] as const
-const PERMISSION_KEYS = ['mode', 'requireApproval'] as const
+const PERMISSION_KEYS = ['mode', 'requireApproval', 'egress'] as const
 const MANIFEST_KEYS = ['name', 'description', 'parameters'] as const
 const TIER_KEYS = ['detailed', 'friendly', 'whimsical'] as const
 
@@ -135,7 +135,8 @@ function parsePermissions(value: unknown, path: string): Permissions {
 	const requireApproval = record['requireApproval'] === undefined
 		? []
 		: expectStringArray(record['requireApproval'], `${path}.requireApproval`)
-	return { mode, requireApproval }
+	const egress = record['egress'] === undefined ? [] : expectStringArray(record['egress'], `${path}.egress`)
+	return { mode, requireApproval, egress }
 }
 
 /**

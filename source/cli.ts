@@ -13,6 +13,7 @@ import { loadBlueprint } from './blueprint/load.ts'
 import { parseArguments, parseModelOverrides, type ParsedArguments } from './cli-args.ts'
 import { ValidationError } from './errors.ts'
 import { createNodeFileSystem } from './node-fs.ts'
+import { noRedaction } from './redact.ts'
 import { runTask } from './run-task.ts'
 import { runBench } from './run-bench.ts'
 import type { Split, SuiteResult } from './bench/types.ts'
@@ -27,7 +28,7 @@ import { createWorktreeManager } from './workspace/worktree.ts'
 const VERSION: string = pkg.version
 const fileSystem = createNodeFileSystem()
 const BOOLEAN_SWITCHES = ['branches'] as const
-const REPEATED_FLAGS = ['model-override'] as const
+const REPEATED_FLAGS = ['model-override', 'approve'] as const
 
 const USAGE = `loom — a git-native, concurrent, provider-agnostic multi-agent engine
 
@@ -36,7 +37,7 @@ Usage:
   loom --help
   loom blueprint validate <file>
   loom run --task <text> [--repo <path>] [--blueprint <file>] [--deployment <file>]
-           [--autonomy <level>] [--model-override <role=profile>]
+           [--autonomy <level>] [--model-override <role=profile>] [--approve <tool>]
   loom runs [--repo <path>]
   loom status <runId> [--repo <path>]
   loom diff   <runId> [--agent <id>] [--repo <path>]
@@ -69,7 +70,7 @@ function openRepository(repoPath: string) {
 	const git = createGitRunner({ cwd: repoPath })
 	const worktrees = createWorktreeManager({ git, fs: fileSystem }, { repoPath })
 	return {
-		store: createRunStore({ fs: fileSystem, now: () => Date.now() }, { repoPath }),
+		store: createRunStore({ fs: fileSystem, now: () => Date.now(), redact: noRedaction }, { repoPath }),
 		lifecycle: createRunLifecycle({ git, worktrees }, { repoPath }),
 	}
 }
@@ -160,6 +161,7 @@ async function runCommand(args: ParsedArguments): Promise<number> {
 		task,
 		autonomy,
 		modelOverrides: overrides.value,
+		approvals: args.repeated['approve'] ?? [],
 		env: process.env,
 		fetch: (url, init) => fetch(url, init),
 		events: (event) => {

@@ -12,6 +12,8 @@ import type { ResultStatus } from './agent/types.ts'
 import { loadBlueprint } from './blueprint/load.ts'
 import type { LoadedBlueprint } from './blueprint/types.ts'
 import { loadDeployment } from './deployment/load.ts'
+import { collectSecrets } from './deployment/secrets.ts'
+import { createRedactor } from './redact.ts'
 import { createProviderRegistry, type ProviderRegistry } from './deployment/registry.ts'
 import type { Deployment } from './deployment/types.ts'
 import type { FetchLike } from './model/openai.ts'
@@ -25,6 +27,7 @@ import type { AutonomyLevel, RunManifest } from './runs/types.ts'
 import { agentBranches } from './runs/types.ts'
 import { createScheduler } from './scheduler/run.ts'
 import { createGitToolHandlers } from './tools/git.ts'
+import { createFetchToolHandlers } from './tools/fetch-url.ts'
 import { createToolRegistry } from './tools/registry.ts'
 import { createRunCommand } from './tools/run-command.ts'
 import { createShellToolHandlers } from './tools/shell.ts'
@@ -40,6 +43,8 @@ export interface RunTaskOptions {
 	readonly autonomy: AutonomyLevel
 	/** Role → profile, overriding the Blueprint for this run only. */
 	readonly modelOverrides: Readonly<Record<string, string>>
+	/** Tools this run has been granted approval for. */
+	readonly approvals: readonly string[]
 	readonly env: Readonly<Record<string, string | undefined>>
 	readonly fetch: FetchLike
 	/** Observed as the run progresses, for live output. */
@@ -112,7 +117,8 @@ export async function runTask(options: RunTaskOptions): Promise<RunOutcome> {
 	if (base.kind !== 'ok') throw new Error(base.message)
 
 	const runId = generateRunId(new Date())
-	const store = createRunStore({ fs, now: () => Date.now() }, { repoPath: options.repoPath })
+	const redact = createRedactor(collectSecrets(deployment, options.env))
+	const store = createRunStore({ fs, now: () => Date.now(), redact }, { repoPath: options.repoPath })
 	const recorder = createRunRecorder(
 		{ store, now: () => Date.now() },
 		{ runId, task: options.task, baseRef: 'HEAD', baseSha: base.value, autonomy: options.autonomy },
@@ -131,6 +137,8 @@ export async function runTask(options: RunTaskOptions): Promise<RunOutcome> {
 			defaultTimeoutSeconds: blueprint.budgets.toolTimeoutSeconds,
 		}),
 		...createGitToolHandlers({ git }),
+		// Egress is granted by the Blueprint, never assumed.
+		...createFetchToolHandlers({ fetch: options.fetch, allowedHosts: blueprint.permissions.egress }),
 	])
 
 	const events: RunEventSink = (event) => {
@@ -140,7 +148,7 @@ export async function runTask(options: RunTaskOptions): Promise<RunOutcome> {
 
 	const scheduler = createScheduler(
 		{ providers, tools, worktrees, blueprint, now: () => Date.now(), events },
-		{ repoPath: options.repoPath, prices: deployment.prices, modelOverrides: options.modelOverrides },
+		{ repoPath: options.repoPath, prices: deployment.prices, modelOverrides: options.modelOverrides, approvals: options.approvals },
 	)
 
 	const result = await scheduler.run({ runId, task: options.task })

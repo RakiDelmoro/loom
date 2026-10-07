@@ -39,29 +39,33 @@ Set per run on the Blueprint; enforced by the engine **before** a mutating tool 
 | `workspace-write` | Writes confined to the agent's worktree; `run_shell` allowed; no network egress unless allowlisted. |
 | `full` | Unrestricted within the sandbox. |
 
-A blocked call returns a structured `permission_denied` result — the run continues and the model can adapt, rather than crashing.
+**Enforced in the agent loop, before the tool runs.** The mode is a second gate, independent of the role's tool grants: a grant says what a role is *for*, the mode says what the run *permits*. A blocked call returns a structured `permission_denied` result and is written to the audit log — the run continues and the model can adapt, rather than crashing or silently succeeding.
+
+The mode outranks an approval: approving a write does not make a read-only run writable.
 
 ### 3.3 Approval gates
 
-`permissions.requireApproval` names tools that must be approved before execution (`run_shell`, or commit/push). In interactive mode the operator approves; in batch mode a policy decides (allowlist of command prefixes, or deny-by-default). Denial is a structured result, never an exception.
+`permissions.requireApproval` names tools that must be approved before execution. The default is **deny**: a run must be granted the approval explicitly (`loom run --approve run_shell`), so a tool the Blueprint marks as sensitive is never run merely because nobody said no. Denial is a structured result, never an exception.
 
 ### 3.4 Sandbox
 
-Command execution runs inside a sandbox — `bubblewrap` (cheap, Linux, no daemon), `gVisor` (stronger, needs a runtime), or a container. The sandbox is the **security** boundary; the worktree is the **isolation** boundary. The two compose: a sandboxed shell inside an agent's worktree is the strongest configuration.
+Command execution runs inside a sandbox — the deployment **container** is the boundary Loom ships with: non-root, restricted egress, a read-only filesystem outside the workspace mount. The sandbox is the **security** boundary; the worktree is the **isolation** boundary, and the two compose.
 
-Sandbox properties: no network by default, read-only access outside the worktree, a scoped `PATH`/`HOME`, dropped capabilities, a non-root user, and a hard CPU/memory/time cap.
+`bubblewrap` or `gVisor` inside the container would narrow it further; that is a deployment choice, not something the CLI can assume, so Loom does not pretend to enforce a sandbox it cannot verify.
 
 ### 3.5 Egress allowlist
 
-Network access is denied by default. An allowlist (registries, documentation hosts) is opt-in per Blueprint. A fetch outside the allowlist is a structured denial.
+Network access is denied by default. `permissions.egress` grants hosts per Blueprint — an exact host, or `*.example.com` — and the one network tool (`fetch_url`) refuses anything else **before opening a connection**. A fetch outside the allowlist is a structured denial, and the request is never attempted.
 
 ### 3.6 Secret redaction
 
-Credentials live in the deployment file or environment, never in the Blueprint, never in a prompt. Every transcript, event, and log line passes through a redactor that strips known secret values before writing. A leak test (M7) asserts that no credential value ever appears in `.loom/`.
+Credentials live in the deployment file or environment, never in the Blueprint, never in a prompt. On top of that structural hygiene, **every line written to a run's record passes through a redactor**: the values behind each `apiKeyEnv` are stripped from the manifest and the event log before they are written.
+
+This is not theoretical. A workspace file can contain a credential, a tool result carries it into the transcript, and the log records tool results. The redactor is what stands between that and a leak — and the M7 leak test reads a secret out of the workspace with a real tool call and asserts it never reaches `.loom/`.
 
 ### 3.7 Audit
 
-The event stream records every tool call, its arguments, its outcome, and which agent made it. A human can reconstruct exactly what ran, and why, from `.loom/runs/<id>/events.jsonl` alone.
+The event stream records every tool call, its arguments, its **full un-truncated result**, and which agent made it, plus every permission denial. A human can reconstruct exactly what ran, what it returned, and what was refused, from `.loom/runs/<id>/events.jsonl` alone.
 
 ### 3.8 Inspection tools are read-only and bounded
 
@@ -92,8 +96,9 @@ A candidate that loosens a safety invariant is rejected before it runs. Reviewin
 
 ## 6. Acceptance tests (M7)
 
-- `read-only` mode blocks every mutating tool with `permission_denied`; the run continues.
-- A denied command never reaches the shell — asserted by a spy on the subprocess leaf, not by observing output.
-- No credential value appears in any file under `.loom/` (leak test over a run that uses a credentialed provider).
-- A path traversal attempt (`../../etc/passwd`) is rejected with a typed error.
-- A network call outside the allowlist is denied.
+- `read-only` mode blocks every mutating tool with a structured denial, and the run continues.
+- A denied command never reaches the shell — asserted with a spy on the handler, not by observing output.
+- No credential value appears in any file under `.loom/`, **including when a tool reads one out of the workspace**: the leak test reads a secret with a real tool call and asserts the log shows `[redacted]`.
+- Every permission denial is written to the audit log.
+- `fetch_url` refuses a host outside the allowlist, and the connection is never opened.
+- Operator pause / plan-edit / resume is **not** covered here: it needs a control channel, and lands in M8.

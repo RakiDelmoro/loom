@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { createCounterClock } from '../test-support/clock.ts'
 import { createMemoryFileSystem } from '../test-support/memory-fs.ts'
+import { createRedactor, noRedaction } from '../redact.ts'
 import { createRunStore } from './store.ts'
 import type { RunManifest } from './types.ts'
 
@@ -23,7 +24,7 @@ function createStore() {
 	const memory = createMemoryFileSystem({}, ['/repo'])
 	return {
 		memory,
-		store: createRunStore({ fs: memory.fs, now: createCounterClock(1_700_000_000_000) }, { repoPath: '/repo' }),
+		store: createRunStore({ fs: memory.fs, now: createCounterClock(1_700_000_000_000), redact: noRedaction }, { repoPath: '/repo' }),
 	}
 }
 
@@ -82,5 +83,31 @@ describe('createRunStore', () => {
 
 	test('lists no runs in a repository that has none', () => {
 		expect(createStore().store.listRunIds()).toEqual([])
+	})
+
+	test('redacts a secret before it reaches the manifest', () => {
+		const memory = createMemoryFileSystem({}, ['/repo'])
+		const store = createRunStore(
+			{ fs: memory.fs, now: createCounterClock(1), redact: createRedactor(['sk-live-0123456789']) },
+			{ repoPath: '/repo' },
+		)
+
+		store.writeManifest('run-1', { ...manifest, task: 'deploy with sk-live-0123456789' })
+
+		const written = memory.files.get('/repo/.loom/runs/run-1/run.json') ?? ''
+		expect(written).not.toContain('sk-live-0123456789')
+		expect(written).toContain('[redacted]')
+	})
+
+	test('redacts a secret before it reaches the event log', () => {
+		const memory = createMemoryFileSystem({}, ['/repo'])
+		const store = createRunStore(
+			{ fs: memory.fs, now: createCounterClock(1), redact: createRedactor(['sk-live-0123456789']) },
+			{ repoPath: '/repo' },
+		)
+
+		store.appendEvent('run-1', { type: 'error', agentId: 'a', kind: 'failed', message: 'saw sk-live-0123456789' })
+
+		expect(memory.files.get('/repo/.loom/runs/run-1/events.jsonl') ?? '').not.toContain('sk-live-0123456789')
 	})
 })

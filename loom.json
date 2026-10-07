@@ -41,7 +41,8 @@
 				"list_dir",
 				"run_shell",
 				"git_diff",
-				"finish"
+				"finish",
+				"fetch_url"
 			],
 			"label": {
 				"detailed": "Coder",
@@ -86,7 +87,8 @@
 		"tools/write_file.json",
 		"tools/list_dir.json",
 		"tools/run_shell.json",
-		"tools/git_diff.json"
+		"tools/git_diff.json",
+		"tools/fetch_url.json"
 	],
 	"routing": {
 		"reasoner": {
@@ -107,7 +109,8 @@
 	},
 	"permissions": {
 		"mode": "workspace-write",
-		"requireApproval": []
+		"requireApproval": [],
+		"egress": []
 	},
 	"alerts": {
 		"costUsd": 5,

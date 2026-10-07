@@ -20,6 +20,7 @@ import type { ProviderRegistry } from '../deployment/registry.ts'
 import { routeRole } from '../model/router.ts'
 import type { ToolSpec } from '../model/types.ts'
 import type { RunEventSink } from '../runs/events.ts'
+import { createToolPolicy } from '../tools/policy.ts'
 import type { ToolRegistry } from '../tools/types.ts'
 import type { WorktreeManager, WorktreeRef } from '../workspace/worktree.ts'
 import { createLimitedProvider, createPool } from './pool.ts'
@@ -43,6 +44,8 @@ export interface SchedulerOptions {
 	readonly prices: Readonly<Record<string, ModelPrice>>
 	/** Role → profile, overriding the Blueprint for this run only. */
 	readonly modelOverrides: Readonly<Record<string, string>>
+	/** Tools this run has been granted approval for. */
+	readonly approvals: readonly string[]
 }
 
 export interface RunRequest {
@@ -80,6 +83,12 @@ export function createScheduler(
 ): { run(request: RunRequest): Promise<RunResult> } {
 	const { blueprint } = dependencies
 	const pool = createPool({ maxConcurrent: blueprint.budgets.maxConcurrentAgents })
+	// One policy for the run: the mode and the approval list do not vary by role.
+	const policy = createToolPolicy({
+		mode: blueprint.permissions.mode,
+		requireApproval: blueprint.permissions.requireApproval,
+		approvals: options.approvals,
+	})
 
 	/** Only the tools the role was granted, in the order the Blueprint declares them. */
 	function toolSpecsFor(role: LoadedRole): ToolSpec[] {
@@ -169,6 +178,7 @@ export function createScheduler(
 			{
 				provider: createLimitedProvider(created.value, pool),
 				tools: dependencies.tools,
+				policy,
 				delegate: (request) => execute(state, request.role, request.task, agentId, depth + 1),
 				events: dependencies.events,
 				now: dependencies.now,

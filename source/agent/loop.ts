@@ -16,6 +16,7 @@ import type { RoutingProfile } from '../blueprint/types.ts'
 import { isRecord } from '../guards.ts'
 import type { Message, Provider, ToolCall, ToolSpec, Usage } from '../model/types.ts'
 import type { RunEventSink } from '../runs/events.ts'
+import type { ToolPolicy } from '../tools/policy.ts'
 import type { ToolRegistry } from '../tools/types.ts'
 import type { AgentOutcome, ResultCard } from './types.ts'
 import { isResultStatus } from './types.ts'
@@ -40,6 +41,8 @@ export interface DelegationRequest {
 export interface AgentLoopDependencies {
 	readonly provider: Provider
 	readonly tools: ToolRegistry
+	/** What the run permits, independent of what the role was granted. */
+	readonly policy: ToolPolicy
 	/** Hands a sub-task to another role and resolves with that role's card. */
 	readonly delegate: (request: DelegationRequest) => Promise<ResultCard>
 	readonly events: RunEventSink
@@ -64,6 +67,8 @@ export interface AgentLoopRequest {
 interface ToolCallOutcome {
 	readonly serialized: string
 	readonly kind: string
+	/** What the tool produced, for the audit log. */
+	readonly payload: unknown
 }
 
 export async function runAgentLoop(
@@ -201,6 +206,7 @@ async function runToolCall(
 		agentId: request.agentId,
 		tool: call.name,
 		kind: outcome.kind,
+		result: outcome.payload,
 	})
 	return outcome
 }
@@ -214,41 +220,48 @@ async function executeToolCall(
 	// Blueprint gave it, whatever the model asks for. Reviewer roles hold no
 	// mutating tools, and that has to hold against a model that calls one anyway.
 	if (!request.allowedTools.includes(call.name)) {
-		return {
-			serialized: JSON.stringify({
-				kind: 'unknown_tool',
-				message: `no tool named "${call.name}" is available to this role`,
-			}),
-			kind: 'unknown_tool',
-		}
+		const denied = { kind: 'unknown_tool', message: `no tool named "${call.name}" is available to this role` }
+		return { serialized: JSON.stringify(denied), kind: 'unknown_tool', payload: denied }
+	}
+
+	// The run's policy is a second gate, independent of the role's grants: a grant
+	// describes intent, the mode describes containment.
+	const decision = dependencies.policy.decide(call.name)
+	if (decision.kind === 'deny') {
+		// Audited as well as returned, so a blocked command is something an operator
+		// can find after the fact rather than only in a transcript they must replay.
+		dependencies.events({
+			type: 'error',
+			agentId: request.agentId,
+			kind: 'permission_denied',
+			message: decision.reason,
+		})
+		const denied = { kind: 'permission_denied', message: decision.reason }
+		return { serialized: JSON.stringify(denied), kind: 'permission_denied', payload: denied }
 	}
 
 	if (call.name === AGENT_TOOL) {
 		const delegation = parseDelegation(call.arguments)
 		if (delegation.kind !== 'ok') {
-			return {
-				serialized: JSON.stringify({ kind: 'invalid_arguments', message: delegation.message }),
-				kind: 'invalid_arguments',
-			}
+			const invalid = { kind: 'invalid_arguments', message: delegation.message }
+			return { serialized: JSON.stringify(invalid), kind: 'invalid_arguments', payload: invalid }
 		}
 		const card = await dependencies.delegate(delegation.value)
-		return { serialized: JSON.stringify(card), kind: card.status }
+		return { serialized: JSON.stringify(card), kind: card.status, payload: card }
 	}
 
 	if (call.name === FINISH_TOOL) {
-		return {
-			serialized: JSON.stringify({
-				kind: 'invalid_arguments',
-				message: 'finish needs status "success" | "error" | "needs_clarification" and a non-empty summary',
-			}),
+		const invalid = {
 			kind: 'invalid_arguments',
+			message: 'finish needs status "success" | "error" | "needs_clarification" and a non-empty summary',
 		}
+		return { serialized: JSON.stringify(invalid), kind: 'invalid_arguments', payload: invalid }
 	}
 
 	const result = await dependencies.tools.run(call.name, parseArguments(call.arguments), {
 		workspaceRoot: request.workspaceRoot,
 	})
-	return { serialized: JSON.stringify(result), kind: result.kind }
+	return { serialized: JSON.stringify(result), kind: result.kind, payload: result }
 }
 
 function settle(card: ResultCard, turns: number, usage: Usage, startedAt: number, finishedAt: number): AgentOutcome {

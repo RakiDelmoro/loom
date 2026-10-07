@@ -149,16 +149,23 @@ Milestones are sequential: the isolation primitive must exist before the engine 
 
 ## M7 — Safety and control
 
-**Goal.** Deployable trust. See [security.md](security.md).
+**Goal.** Make containment something the runtime enforces, not something the design assumes. See [security.md](security.md).
 
-**Deliverables.** Permission modes; approval gates for `run_shell` and commits; sandboxed command execution; egress allowlist; secret redaction; audit log; plan-approval and live steering.
+**Deliverables.**
+
+1. **Permission modes enforced at runtime** — `read-only` | `workspace-write` | `full`, checked in the agent loop before a tool runs, as a gate independent of the role's tool grants.
+2. **Approval gates** — `permissions.requireApproval`, denied by default, granted per run with `--approve`.
+3. **Egress allowlist** — `permissions.egress`, enforced by `fetch_url` before the connection is opened.
+4. **Secret redaction** — the values behind each `apiKeyEnv` are stripped from every line written to a run's record.
+5. **Audit** — permission denials are logged, and the log records each tool's full un-truncated result.
 
 **Acceptance criteria.**
 
-- [ ] `read-only` mode blocks every mutating tool with a structured denial; the run continues.
-- [ ] A denied command never reaches the shell (asserted, not assumed).
-- [ ] No credential appears in any transcript or log (leak test).
-- [ ] An operator can pause a run, edit the plan, and resume.
+- [x] `read-only` mode blocks every mutating tool with a structured denial; the run continues.
+- [x] A denied command never reaches the shell — asserted with a spy on the handler, not by observing output.
+- [x] No credential appears in any transcript or log, **including when a tool reads one out of the workspace**.
+- [x] Every permission denial is written to the audit log.
+- [ ] Operator pause / plan-edit / resume — **deferred to M8**: it needs a control channel, which is what M8 builds. The engine-side gate exists; a pause has nowhere to be delivered from until then.
 
 ---
 

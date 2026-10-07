@@ -2,6 +2,8 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import * as path from 'node:path'
 import { createNodeFileSystem } from '../node-fs.ts'
+import { isRecord } from '../guards.ts'
+import { noRedaction } from '../redact.ts'
 import { runTask, type RunTaskOptions } from '../run-task.ts'
 import type { AutonomyLevel } from './types.ts'
 import { delay } from '../test-support/clock.ts'
@@ -106,6 +108,7 @@ function runOptions(repo: string, task: string, autonomy: AutonomyLevel): RunTas
 		task,
 		autonomy,
 		modelOverrides: {},
+		approvals: [],
 		env: {},
 		fetch: (url, init) => fetch(url, init),
 	}
@@ -134,7 +137,7 @@ suite('the run lifecycle against real git', () => {
 
 			// The manifest is on disk, terminal, and names the agent that ran.
 			const fs = createNodeFileSystem()
-			const store = createRunStore({ fs, now: () => Date.now() }, { repoPath: repo })
+			const store = createRunStore({ fs, now: () => Date.now(), redact: noRedaction }, { repoPath: repo })
 			const manifest = store.readManifest(outcome.manifest.runId)
 			if (manifest === null) throw new Error('the manifest was not written')
 			expect(manifest.status).toBe('success')
@@ -249,7 +252,7 @@ suite('the run lifecycle against real git', () => {
 		// The worktree is still there for inspection, but the base is clean and
 		// the manifest records what happened.
 		const fs = createNodeFileSystem()
-		const store = createRunStore({ fs, now: () => Date.now() }, { repoPath: repo })
+		const store = createRunStore({ fs, now: () => Date.now(), redact: noRedaction }, { repoPath: repo })
 		expect(store.readManifest(outcome.manifest.runId)?.status).toBe('error')
 		expect(gitOutput(repo, ['status', '--porcelain']).trim()).toBe('')
 
@@ -297,6 +300,95 @@ suite('the run lifecycle against real git', () => {
 		}
 	})
 
+	test('a secret that reaches a tool result never reaches the run record', async () => {
+		const SECRET = 'super-secret-value-0123456789'
+
+		// The Blueprint only reads, and the workspace holds the secret — exactly the
+		// leak a redactor exists for.
+		const reader = Bun.serve({
+			port: 0,
+			async fetch(request) {
+				const body: unknown = await request.json()
+				const messages = isRecord(body) && Array.isArray(body['messages']) ? body['messages'] : []
+				const read = messages.some((message) => isRecord(message) && message['role'] === 'tool')
+				const toolCall = read
+					? {
+							id: 'c2',
+							type: 'function',
+							function: { name: 'finish', arguments: JSON.stringify({ status: 'success', summary: 'read it' }) },
+						}
+					: {
+							id: 'c1',
+							type: 'function',
+							function: { name: 'read_file', arguments: JSON.stringify({ path: 'secrets.txt' }) },
+						}
+				return Response.json({
+					choices: [{ message: { role: 'assistant', content: '', tool_calls: [toolCall] }, finish_reason: 'tool_calls' }],
+					usage: { prompt_tokens: 10, completion_tokens: 5 },
+				})
+			},
+		})
+
+		const repo = createTemporaryRepository()
+		cleanupPath = repo
+		try {
+			mkdirSync(path.join(repo, 'tools'), { recursive: true })
+			mkdirSync(path.join(repo, 'prompts'), { recursive: true })
+			for (const tool of ['read_file', 'finish']) {
+				writeFileSync(
+					path.join(repo, 'tools', `${tool}.json`),
+					JSON.stringify({ name: tool, description: `${tool} tool`, parameters: { type: 'object' } }),
+				)
+			}
+			writeFileSync(path.join(repo, 'prompts', 'orchestrator.md'), 'You are the orchestrator.\n')
+			writeFileSync(
+				path.join(repo, 'loom.json'),
+				JSON.stringify({
+					entryRole: 'orchestrator',
+					roles: {
+						orchestrator: { prompt: 'prompts/orchestrator.md', model: 'default', tools: ['read_file', 'finish'] },
+					},
+					tools: ['tools/read_file.json', 'tools/finish.json'],
+					routing: { default: { provider: 'stub', model: 'test-model', temperature: 0 } },
+					budgets: { maxAgentDepth: 2, maxConcurrentAgents: 2, toolTimeoutSeconds: 30 },
+					permissions: { mode: 'workspace-write', requireApproval: [], egress: [] },
+				}),
+			)
+			writeFileSync(
+				path.join(repo, 'loom.deployment.json'),
+				JSON.stringify({
+					// The credential is *named* here and lives only in the environment.
+					providers: { stub: { baseUrl: `http://localhost:${String(reader.port)}/v1`, apiKeyEnv: 'STUB_KEY' } },
+					prices: { 'test-model': { inputPer1M: 0, cachedInputPer1M: 0, outputPer1M: 0 } },
+				}),
+			)
+			writeFileSync(path.join(repo, 'secrets.txt'), `STUB_KEY=${SECRET}\n`)
+			gitOutput(repo, ['add', '-A'])
+			gitOutput(repo, ['-c', 'user.name=Test', '-c', 'user.email=test@localhost', 'commit', '-q', '-m', 'fixture'])
+
+			const outcome = await runTask({
+				...runOptions(repo, 'read secrets.txt', 'supervised'),
+				env: { STUB_KEY: SECRET },
+			})
+			expect(outcome.status).toBe('success')
+
+			// The read really did carry the secret into a tool result — otherwise this
+			// test would pass for the wrong reason.
+			const runDirectory = path.join(repo, '.loom', 'runs', outcome.manifest.runId)
+			const written = readdirSync(runDirectory)
+			expect(written.length).toBeGreaterThan(0)
+
+			for (const file of written) {
+				const text = readFileSync(path.join(runDirectory, file), 'utf8')
+				expect(text).not.toContain(SECRET)
+			}
+			// The redactor ran, rather than the leak never having happened.
+			expect(readFileSync(path.join(runDirectory, 'events.jsonl'), 'utf8')).toContain('[redacted]')
+		} finally {
+			reader.stop(true)
+		}
+	})
+
 	test('a run killed mid-flight leaves a recoverable state, not a leaked worktree', async () => {
 		// An endpoint that accepts the connection and never answers, so the run
 		// blocks inside its first model call — after its worktree exists.
@@ -324,7 +416,7 @@ suite('the run lifecycle against real git', () => {
 			await proc.exited
 
 			const fs = createNodeFileSystem()
-			const store = createRunStore({ fs, now: () => Date.now() }, { repoPath: repo })
+			const store = createRunStore({ fs, now: () => Date.now(), redact: noRedaction }, { repoPath: repo })
 			const runIds = store.listRunIds()
 			expect(runIds).toHaveLength(1)
 			const runId = runIds[0] ?? ''

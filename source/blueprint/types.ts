@@ -72,6 +72,11 @@ export interface Alerts {
 export interface Permissions {
 	readonly mode: PermissionMode
 	readonly requireApproval: readonly string[]
+	/**
+	 * Hosts a run may reach. **Empty means no network at all** — egress is granted,
+	 * never assumed.
+	 */
+	readonly egress: readonly string[]
 }
 
 export interface ToolManifest {

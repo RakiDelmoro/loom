@@ -56,6 +56,6 @@ export function createTestBlueprint(
 			toolTimeoutSeconds: 30,
 		},
 		alerts: options.alerts ?? {},
-		permissions: { mode: 'workspace-write', requireApproval: [] },
+		permissions: { mode: 'workspace-write', requireApproval: [], egress: [] },
 	}
 }

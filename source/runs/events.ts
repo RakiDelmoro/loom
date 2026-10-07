@@ -20,7 +20,17 @@ export type RunEvent =
 			readonly depth: number
 	  }
 	| { readonly type: 'tool_call'; readonly agentId: string; readonly tool: string; readonly arguments: string }
-	| { readonly type: 'tool_result'; readonly agentId: string; readonly tool: string; readonly kind: string }
+	| {
+			readonly type: 'tool_result'
+			readonly agentId: string
+			readonly tool: string
+			readonly kind: string
+			/**
+			 * The un-truncated result, so a reviewer can see what the tool actually
+			 * returned rather than only that it succeeded. Redacted before it is written.
+			 */
+			readonly result: unknown
+	  }
 	| { readonly type: 'commit'; readonly agentId: string; readonly branch: string; readonly sha: string | null }
 	| {
 			readonly type: 'agent_finish'

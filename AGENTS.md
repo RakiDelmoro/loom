@@ -239,6 +239,7 @@ loom/
     ├── node-fs.ts     the real filesystem leaf
     ├── directory-remover.ts  the recursive-delete leaf
     ├── guards.ts      the canonical isRecord guard
+    ├── redact.ts      secret redaction for everything a run writes
     ├── agent/         the agent loop and its result types
     ├── bench/         benchmark specs, the suite runner, validation, scoring, the judge
     ├── blueprint/     types, parsers, loader
@@ -246,7 +247,7 @@ loom/
     ├── model/         provider interface, fake, openai client, router
     ├── runs/          the manifest, the event log, the recorder, the lifecycle
     ├── scheduler/     the bounded pool and the agent-tree scheduler
-    ├── tools/         tool types, registry, and the built-in tools
+    ├── tools/         tool types, the policy, the registry, and the built-in tools
     ├── tuner/         the optimizer: branches, the contract, verdicts, the loop, promotion
     ├── workspace/     naming, git exclude, the git leaf, the worktree manager
     └── test-support/  shared test doubles (support code, not tests)

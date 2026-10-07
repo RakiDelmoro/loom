@@ -1,9 +1,11 @@
 import { describe, expect, test } from 'bun:test'
 import { createFakeProvider } from '../model/fake.ts'
 import type { ChatRequest, Provider } from '../model/types.ts'
+import type { RunEvent } from '../runs/events.ts'
 import { createCounterClock, delay } from '../test-support/clock.ts'
 import { call, textResponse, toolCallResponse } from '../test-support/model.ts'
 import { createToolRegistry } from '../tools/registry.ts'
+import { createToolPolicy } from '../tools/policy.ts'
 import type { ToolRegistry } from '../tools/types.ts'
 import { runAgentLoop, type AgentLoopDependencies, type AgentLoopRequest } from './loop.ts'
 
@@ -24,6 +26,7 @@ function dependencies(provider: Provider, tools: ToolRegistry = createToolRegist
 		provider,
 		tools,
 		delegate: async () => ({ status: 'success', summary: 'child done' }),
+		policy: createToolPolicy({ mode: 'workspace-write', requireApproval: [], approvals: [] }),
 		events: () => {},
 		now: createCounterClock(),
 	}
@@ -153,6 +156,7 @@ describe('runAgentLoop', () => {
 				seen.push(delegation)
 				return { status: 'success', summary: 'child says hi' }
 			},
+			policy: createToolPolicy({ mode: 'workspace-write', requireApproval: [], approvals: [] }),
 			events: () => {},
 			now: createCounterClock(),
 		}
@@ -178,6 +182,7 @@ describe('runAgentLoop', () => {
 				active -= 1
 				return { status: 'success', summary: 'child' }
 			},
+			policy: createToolPolicy({ mode: 'workspace-write', requireApproval: [], approvals: [] }),
 			events: () => {},
 			now: createCounterClock(),
 		}
@@ -211,5 +216,49 @@ describe('runAgentLoop', () => {
 		const outcome = await runAgentLoop(dependencies(provider), request)
 		expect(outcome.usage).toEqual({ inputTokens: 0, cachedInputTokens: 0, outputTokens: 0 })
 		expect(outcome.startedAt).toBeLessThan(outcome.finishedAt)
+	})
+
+	test('a tool the run forbids is denied, and never reaches the handler', async () => {
+		let invoked = 0
+		const tools = createToolRegistry([
+			{
+				name: 'write_file',
+				run: async () => {
+					invoked += 1
+					return { kind: 'success', data: null }
+				},
+			},
+		])
+		let second: ChatRequest | undefined
+		const provider = createFakeProvider([
+			toolCallResponse([call('c1', 'write_file', { path: 'a', content: 'b' })]),
+			(request) => {
+				second = request
+				return toolCallResponse([call('f', 'finish', { status: 'success', summary: 'ok' })])
+			},
+		])
+		const events: RunEvent[] = []
+
+		const outcome = await runAgentLoop(
+			{
+				provider,
+				tools,
+				policy: createToolPolicy({ mode: 'read-only', requireApproval: [], approvals: [] }),
+				delegate: async () => ({ status: 'success', summary: 'child' }),
+				events: (event) => events.push(event),
+				now: createCounterClock(),
+			},
+			{ ...request, allowedTools: ['write_file', 'finish'] },
+		)
+
+		// Asserted, not assumed: the handler was never reached.
+		expect(invoked).toBe(0)
+		expect(lastToolMessage(second)).toContain('permission_denied')
+
+		// The denial is audited, not only returned, so an operator can find it later.
+		expect(events.some((event) => event.type === 'error' && event.kind === 'permission_denied')).toBe(true)
+
+		// And the run carries on rather than dying over a blocked command.
+		expect(outcome.card.status).toBe('success')
 	})
 })

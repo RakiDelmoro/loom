@@ -16,6 +16,7 @@
 import * as path from 'node:path'
 import type { FileSystem } from '../fs.ts'
 import { logLine, type RunEvent } from './events.ts'
+import type { Redact } from '../redact.ts'
 import type { RunManifest } from './types.ts'
 import { parseRunManifest } from './validate.ts'
 
@@ -26,6 +27,12 @@ const EVENTS_FILE = 'events.jsonl'
 export interface RunStoreDependencies {
 	readonly fs: FileSystem
 	readonly now: () => number
+	/**
+	 * Applied to every line written. A run's record describes untrusted content,
+	 * and a workspace file can contain a credential — so the log is where a secret
+	 * would otherwise end up.
+	 */
+	readonly redact: Redact
 }
 
 export interface RunStore {
@@ -50,7 +57,8 @@ export function createRunStore(dependencies: RunStoreDependencies, options: { re
 		writeManifest(runId: string, manifest: RunManifest): void {
 			const directory = runDirectory(runId)
 			fs.ensureDirectory(directory)
-			fs.writeTextFile(path.join(directory, MANIFEST_FILE), `${JSON.stringify(manifest, null, '\t')}\n`)
+			const text = `${JSON.stringify(manifest, null, '\t')}\n`
+			fs.writeTextFile(path.join(directory, MANIFEST_FILE), dependencies.redact(text))
 		},
 
 		readManifest(runId: string): RunManifest | null {
@@ -70,7 +78,8 @@ export function createRunStore(dependencies: RunStoreDependencies, options: { re
 			const directory = runDirectory(runId)
 			fs.ensureDirectory(directory)
 			const at = new Date(dependencies.now()).toISOString()
-			fs.appendTextFile(path.join(directory, EVENTS_FILE), `${JSON.stringify(logLine(event, at))}\n`)
+			const line = `${JSON.stringify(logLine(event, at))}\n`
+			fs.appendTextFile(path.join(directory, EVENTS_FILE), dependencies.redact(line))
 		},
 
 		listRunIds(): readonly string[] {

@@ -74,7 +74,7 @@ suite('the scheduler against real git', () => {
 				now: createCounterClock(),
 				events: () => {},
 			},
-			{ repoPath: repo, prices: {}, modelOverrides: {} },
+			{ repoPath: repo, prices: {}, modelOverrides: {}, approvals: [] },
 		)
 
 		const result = await scheduler.run({ runId: 'run-1', task: 'write two files' })

@@ -64,6 +64,8 @@ export async function runBench(options: RunBenchOptions): Promise<SuiteResult> {
 					task: request.task,
 					autonomy: 'auto',
 					modelOverrides: {},
+					// A benchmark run is unattended by definition, so it approves nothing.
+					approvals: [],
 					env: options.env,
 					fetch: options.fetch,
 				})

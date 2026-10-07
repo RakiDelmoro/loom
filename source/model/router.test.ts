@@ -17,7 +17,7 @@ const blueprint: LoadedBlueprint = {
 	},
 	budgets: { maxAgentDepth: 6, maxConcurrentAgents: 8, toolTimeoutSeconds: 60 },
 	alerts: {},
-	permissions: { mode: 'workspace-write', requireApproval: [] },
+	permissions: { mode: 'workspace-write', requireApproval: [], egress: [] },
 }
 
 describe('routeRole', () => {
