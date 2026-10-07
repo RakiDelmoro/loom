@@ -54,6 +54,13 @@ export interface RunTaskOptions {
 	readonly fetch: FetchLike
 	/** Observed as the run progresses, for live output. */
 	readonly events?: RunEventSink
+	/**
+	 * Aborted when the process is shutting down.
+	 *
+	 * A run killed mid-flight was left saying `running` forever, indistinguishable
+	 * from one still working — the recorder could mark it and nothing called it.
+	 */
+	readonly signal?: AbortSignal
 }
 
 export interface MergedBranch {
@@ -130,6 +137,13 @@ export async function runTask(options: RunTaskOptions): Promise<RunOutcome> {
 	)
 	recorder.begin()
 
+	// The abort listener is registered synchronously and runs synchronously, so the
+	// manifest is written before the process that asked for the abort can exit.
+	const abandon = (): void => {
+		recorder.abandon('the process was interrupted while this run was in flight')
+	}
+	options.signal?.addEventListener('abort', abandon, { once: true })
+
 	const providers: ProviderRegistry = createProviderRegistry(
 		{ fetch: options.fetch, env: options.env },
 		deployment,
@@ -167,6 +181,7 @@ export async function runTask(options: RunTaskOptions): Promise<RunOutcome> {
 	)
 
 	const result = await scheduler.run({ runId, task: options.task })
+	options.signal?.removeEventListener('abort', abandon)
 	const manifest = recorder.finish(result)
 
 	const merged: MergedBranch[] = []

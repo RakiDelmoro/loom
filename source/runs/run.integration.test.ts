@@ -70,11 +70,12 @@ function createRepositoryWithBlueprint(modelBaseUrl: string): string {
 }
 
 /** A stub OpenAI-compatible endpoint: write a file, then finish. */
-function createStubModel() {
+function createStubModel(options: { readonly delayMs?: number } = {}) {
 	let calls = 0
 	const server = Bun.serve({
 		port: 0,
-		fetch: () => {
+		fetch: async () => {
+			if (options.delayMs !== undefined) await new Promise((resolve) => setTimeout(resolve, options.delayMs))
 			calls += 1
 			const toolCall =
 				calls === 1
@@ -441,6 +442,38 @@ suite('the run lifecycle against real git', () => {
 		} finally {
 			proc.kill()
 			hanging.stop(true)
+		}
+	})
+
+	test('a run interrupted in flight is marked, not left saying it is still running', async () => {
+		// A killed run used to keep `status: running` for ever, indistinguishable
+		// from one still working: the recorder could mark it and nothing called it.
+		const stub = createStubModel({ delayMs: 400 })
+		const repo = createRepositoryWithBlueprint(stub.baseUrl)
+		cleanupPath = repo
+		const controller = new AbortController()
+
+		try {
+			const running = runTask({ ...runOptions(repo, 'write output.txt', 'auto'), signal: controller.signal })
+
+			// Let it get properly under way, then interrupt the way a shutting-down
+			// process does — synchronously, so the manifest is written before the
+			// process would exit.
+			await delay(150)
+			controller.abort()
+
+			const fs = createNodeFileSystem()
+			const store = createRunStore({ fs, now: () => Date.now(), redact: noRedaction }, { repoPath: repo })
+			const runIds = store.listRunIds()
+			expect(runIds).toHaveLength(1)
+
+			const manifest = store.readManifest(runIds[0] ?? '')
+			expect(manifest?.status).toBe('interrupted')
+			expect(manifest?.finishedAt).not.toBeNull()
+
+			await running
+		} finally {
+			stub.server.stop(true)
 		}
 	})
 })

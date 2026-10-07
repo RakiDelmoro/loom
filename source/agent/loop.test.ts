@@ -232,6 +232,19 @@ describe('runAgentLoop', () => {
 		expect(turn?.type === 'model_call' ? turn.durationMs : -1).toBe(7)
 	})
 
+	test('the role is told where its workspace is', async () => {
+		// The one fact a role cannot infer and used to never be given: a model left to
+		// guess recites /testbed or someone else's desktop path and spends its whole
+		// turn budget discovering that the guess was wrong.
+		const provider = createFakeProvider([toolCallResponse([call('f', 'finish', { status: 'success', summary: 'done' })])])
+		await runAgentLoop(dependencies(provider), { ...request, workspaceRoot: '/tmp/the-workspace' })
+
+		const system = provider.calls[0]?.messages[0]?.content ?? ''
+		expect(system).toContain('You are a test role.')
+		expect(system).toContain('/tmp/the-workspace')
+		expect(system).toContain('git repository')
+	})
+
 	test('a provider failure is retried, and the role carries on when the endpoint recovers', async () => {
 		// A local server 500s on a tool call it cannot parse; a provider rate-limits.
 		// A role that gave up on the first hiccup would make autonomy impossible.

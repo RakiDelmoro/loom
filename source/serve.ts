@@ -81,5 +81,13 @@ export async function serve(options: ServeOptions): Promise<ServeHandle> {
 			: '  a bearer token is required for every /api/ call\n',
 	)
 
-	return { url: server.url, stop: () => server.stop() }
+	return {
+		url: server.url,
+		stop: async (): Promise<void> => {
+			// The run first: stopping the server would otherwise leave an in-flight
+			// run's manifest saying `running` with nothing left to finish it.
+			service.stop()
+			await server.stop()
+		},
+	}
 }

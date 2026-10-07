@@ -61,5 +61,6 @@ export function createFakeRunService(options: { readonly diff?: OpResult<string>
 		diff: () => options.diff ?? ok('--- a\n+++ b\n'),
 		merge: (_runId, agentId) => (agentId === 'ghost' ? failed('no agent "ghost"') : ok('mergesha')),
 		undo: () => ok('base0000'),
+		stop: () => {},
 	}
 }

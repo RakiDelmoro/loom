@@ -90,7 +90,11 @@ export async function runAgentLoop(
 ): Promise<AgentOutcome> {
 	const startedAt = dependencies.now()
 	const messages: Message[] = [
-		{ role: 'system', content: request.systemPrompt },
+		// The role's own prompt says what to do and never *where*. Left to guess, a
+		// model recites a path from its training data — /testbed, someone else's
+		// Windows desktop — and spends its whole turn budget discovering, one shell
+		// command at a time, that the guess was wrong.
+		{ role: 'system', content: `${request.systemPrompt}\n\n${workspaceBriefing(request.workspaceRoot)}` },
 		{ role: 'user', content: request.task },
 	]
 	const usage: UsageTotals = { inputTokens: 0, cachedInputTokens: 0, outputTokens: 0 }
@@ -339,6 +343,29 @@ async function executeToolCall(
 		workspaceRoot: request.workspaceRoot,
 	})
 	return { serialized: JSON.stringify(result), kind: result.kind, payload: result }
+}
+
+/**
+ * Where this role is working.
+ *
+ * The one fact a role cannot infer and is never given: its own workspace. Every
+ * tool path is resolved against this root, `run_shell` starts here, and the
+ * engine owns committing — so there is nothing here for a model to guess at.
+ */
+export function workspaceBriefing(workspaceRoot: string): string {
+	return [
+		'# Where you are working',
+		'',
+		`Your workspace is ${workspaceRoot}, a git repository. This is the only tree you`,
+		'can see: every path your tools take is relative to it, and `run_shell` starts',
+		'there. Do not reach for a path from somewhere else — a container layout, another',
+		'machine, a parent directory — because none of them exist here.',
+		'',
+		'The engine commits your work and merges it. Do not run git commands to commit,',
+		'and do not go looking for a build system to decide how to test: read what the',
+		'repository actually contains, and when a command fails because a path was wrong,',
+		'believe the error rather than trying the next guess.',
+	].join('\n')
 }
 
 /**

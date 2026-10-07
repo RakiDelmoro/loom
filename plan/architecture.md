@@ -74,6 +74,7 @@ Nothing is inferred from prose. The manifest and the event log are the record.
 - **Single-flight per worktree.** A worktree has exactly one owner at a time, enforced structurally. This is what makes concurrency safe — the reference implementation is sequential *because* it shares one working tree.
 - **Bounded depth.** `maxAgentDepth` bounds recursion, and each role has a turn limit. Spend is measured but never enforced — see [model-routing.md](model-routing.md) "Spend visibility, not enforcement".
 - **Determinism.** Given the same Blueprint, base ref, and scripted provider, a run produces the same manifest — except for timestamps and commit shas.
+- **A role is told where it is working.** Every role's system prompt ends with its workspace root, that it is a git repository, that tool paths resolve against it and `run_shell` starts there, and that the engine commits — not the role. This is the one fact a model cannot infer, and without it a role recites a path from its training data: a run spent thirty of its fifty-eight shell commands discovering that `/testbed` and a Windows desktop path do not exist.
 
 Details, edge cases, and the merge model: [isolation.md](isolation.md).
 
@@ -109,7 +110,12 @@ Details: [blueprint-format.md](blueprint-format.md), [model-routing.md](model-ro
 
 ## 7. Failure philosophy
 
-Every failure is a **typed result** the caller can act on, never an exception that unwinds the process: `timeout`, `unavailable`, `invalid_arguments`, `permission_denied`, `depth_exceeded`, `context_overflow`. Recovery policy lives in the **Blueprint** (a recovery role, a retry instruction), not in the engine — the engine stays domain-blind.
+Every failure is a **typed result** the caller can act on, never an exception that unwinds the process: `timeout`, `unavailable`, `invalid_arguments`, `permission_denied`, `depth_exceeded`, `context_overflow`. Recovery policy for the *task* lives in the **Blueprint** (a recovery role, a delegation to retry), not in the engine — the engine stays domain-blind.
+
+Two things the engine does own, because they are properties of a call rather than of the work:
+
+- **A model call that produced no answer is retried**, bounded, with backoff — `unavailable`, `timeout`, `rate_limited`, and an empty completion. A local endpoint 500s on a tool call it cannot parse; a transport hiccup is not the task failing, and an autonomous system that dies on one is not autonomous. `invalid_response` is not retried: the provider answered with nonsense, and asking again does not fix that.
+- **A run killed in flight is marked `interrupted`**, not left saying it is running. The manifest is written synchronously on the abort, before the process that asked for it can exit.
 
 A run never dies because one agent failed. A service crash never loses committed work, because work is committed to git as it completes.
 

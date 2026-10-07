@@ -49,6 +49,11 @@ export interface RunService {
 	list(): readonly RunManifest[]
 	manifest(runId: string): RunManifest | null
 	events(runId: string): readonly RunLogRecord[]
+	/**
+	 * Marks the run in progress interrupted. For a process shutting down: without
+	 * it the run's manifest says `running` for good.
+	 */
+	stop(): void
 	/** The diff of a run's committed branches; all of them, or the agent named. */
 	diff(runId: string, agentId: string | null): OpResult<string>
 	merge(runId: string, agentId: string): OpResult<string>
@@ -56,7 +61,7 @@ export interface RunService {
 }
 
 export function createRunService(dependencies: RunServiceDependencies): RunService {
-	let active: { readonly runId: string; readonly control: RunControl } | null = null
+	let active: { readonly runId: string; readonly control: RunControl; readonly abort: AbortController } | null = null
 
 	return {
 		submit(request: SubmitRequest): OpResult<{ readonly runId: string }> {
@@ -67,7 +72,8 @@ export function createRunService(dependencies: RunServiceDependencies): RunServi
 
 			const runId = dependencies.newRunId()
 			const control = createRunControl()
-			active = { runId, control }
+			const abort = new AbortController()
+			active = { runId, control, abort }
 
 			const options: RunTaskOptions = {
 				runId,
@@ -82,6 +88,7 @@ export function createRunService(dependencies: RunServiceDependencies): RunServi
 				approvals: [],
 				env: dependencies.env,
 				fetch: dependencies.fetch,
+				signal: abort.signal,
 			}
 
 			void dependencies
@@ -132,6 +139,10 @@ export function createRunService(dependencies: RunServiceDependencies): RunServi
 
 		undo(runId: string): OpResult<string> {
 			return undoRun(dependencies.store, dependencies.lifecycle, runId)
+		},
+
+		stop(): void {
+			active?.abort.abort()
 		},
 	}
 }
