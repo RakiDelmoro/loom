@@ -34,6 +34,7 @@ export function createSuiteResult(options: SuiteFixtureOptions): SuiteResult {
 		score: summary.passRate >= 1 ? 1 : 0,
 		reasons: [],
 		runId: 'run-1',
+		workspace: null,
 		costUsd: 0,
 		wallTimeSeconds: 0,
 	}))

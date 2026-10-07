@@ -10,7 +10,7 @@ function outcome(
 	costUsd: number,
 	wallTimeSeconds: number,
 ): BenchmarkOutcome {
-	return { benchmark, repetition, status, score, reasons: [], runId: 'run-1', costUsd, wallTimeSeconds }
+	return { benchmark, repetition, status, score, reasons: [], runId: 'run-1', workspace: null, costUsd, wallTimeSeconds }
 }
 
 describe('wilsonInterval', () => {

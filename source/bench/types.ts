@@ -54,6 +54,15 @@ export interface BenchmarkOutcome {
 	readonly score: 0 | 1
 	readonly reasons: readonly string[]
 	readonly runId: string | null
+	/**
+	 * Where the run happened, when the sandbox was kept.
+	 *
+	 * A benchmark's workspace holds the run's own record under `.loom/runs/`, so
+	 * this is the pointer that makes a finished suite openable in the UI. It is
+	 * null when the sandbox was removed, because a path to a deleted directory is
+	 * worse than no path at all.
+	 */
+	readonly workspace: string | null
 	readonly costUsd: number
 	readonly wallTimeSeconds: number
 }

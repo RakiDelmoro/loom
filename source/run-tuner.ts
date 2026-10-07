@@ -79,6 +79,7 @@ export async function runTunerCommand(options: RunTunerOptions): Promise<TunerRe
 					// The Tuner's own bookkeeping is the report; per-run bench results
 					// would bury it.
 					resultsDirectory: null,
+		keepWorkspaces: false,
 					env: options.env,
 					fetch: options.fetch,
 				}),

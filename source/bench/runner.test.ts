@@ -66,12 +66,13 @@ function createHarness(options: {
 		created,
 		removed,
 		tasks,
-		run: (split: Split, repetitions = 1) =>
+		run: (split: Split, repetitions = 1, keepWorkspaces = false) =>
 			runSuite(dependencies, suite, {
 				split,
 				blueprintPath: '/bp.json',
 				deploymentPath: '/dep.json',
-				repetitions,
+				repetitions: repetitions,
+				keepWorkspaces,
 			}),
 	}
 }
@@ -99,10 +100,25 @@ describe('runSuite', () => {
 
 	test('tears down every workspace it created', async () => {
 		const harness = createHarness()
-		await harness.run('optimization', 2)
+		const result = await harness.run('optimization', 2)
 
 		expect(harness.created).toHaveLength(4)
 		expect(harness.removed).toEqual(['/tmp/bench-1', '/tmp/bench-2', '/tmp/bench-3', '/tmp/bench-4'])
+		// And names none of them: a path to a directory that has been deleted is
+		// worse than no path, because it reads as something that can be opened.
+		expect(result.outcomes.every((outcome) => outcome.workspace === null)).toBe(true)
+	})
+
+	test('keeping the workspaces leaves them in place, and says where they are', async () => {
+		// A suite deletes what it built, so a benchmark that fails for a reason its
+		// outcome line does not explain leaves nothing to look at. The run's own
+		// record lives in the workspace, so the pointer is the thing that makes a
+		// finished suite openable.
+		const harness = createHarness()
+		const result = await harness.run('optimization', 1, true)
+
+		expect(harness.removed).toEqual([])
+		expect(result.outcomes.map((outcome) => outcome.workspace)).toEqual(['/tmp/bench-1', '/tmp/bench-2'])
 	})
 
 	test('tears down even when the task runner throws', async () => {

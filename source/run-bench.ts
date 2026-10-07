@@ -27,6 +27,8 @@ export interface RunBenchOptions {
 	readonly blueprintPath: string
 	readonly deploymentPath: string
 	readonly repetitions: number
+	/** Keep each benchmark's sandbox instead of deleting it, so its run stays openable. */
+	readonly keepWorkspaces: boolean
 	/** Where to append the result, for regression tracking. Null writes nothing. */
 	readonly resultsDirectory: string | null
 	readonly env: Readonly<Record<string, string | undefined>>
@@ -91,6 +93,7 @@ export async function runBench(options: RunBenchOptions): Promise<SuiteResult> {
 			blueprintPath: options.blueprintPath,
 			deploymentPath: options.deploymentPath,
 			repetitions: options.repetitions,
+			keepWorkspaces: options.keepWorkspaces,
 		},
 	)
 

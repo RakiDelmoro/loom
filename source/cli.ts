@@ -47,7 +47,7 @@ Usage:
   loom merge  <runId> --agent <id> [--repo <path>]
   loom undo   <runId> [--repo <path>]
   loom clean  <runId> [--branches] [--repo <path>]
-  loom bench --suite <dir> [--split <optimization|held-out>] [--repetitions <n>]
+  loom bench --suite <dir> [--split <optimization|held-out>] [--repetitions <n>] [--keep]
   loom tune [--repo <path>] [--config <file>]
   loom serve [--repo <path>] [--port <n>] [--host <addr>]
 
@@ -289,6 +289,14 @@ function formatSuiteResult(result: SuiteResult): string {
 		if (outcome.status === 'pass') continue
 		lines.push(`  ${outcome.benchmark} #${String(outcome.repetition)} ${outcome.status}: ${outcome.reasons.join('; ')}`)
 	}
+	if (result.outcomes.some((outcome) => outcome.workspace !== null)) {
+		lines.push('')
+		lines.push('kept workspaces (each holds its run under .loom/runs/):')
+		for (const outcome of result.outcomes) {
+			if (outcome.workspace === null) continue
+			lines.push(`  ${outcome.benchmark} #${String(outcome.repetition)} ${outcome.workspace}`)
+		}
+	}
 	return `${lines.join('\n')}\n`
 }
 
@@ -303,12 +311,17 @@ async function benchCommand(args: ParsedArguments): Promise<number> {
 	}
 
 	const suiteFlag = args.flags['suite']
+	// Keeping the sandboxes is how a finished suite stays inspectable: each
+	// workspace holds its run's own record, so a benchmark that failed for a
+	// reason the outcome line does not explain can still be opened.
+	const keepWorkspaces = args.flags['keep'] !== undefined
 	const result = await runBench({
 		suitePath: path.resolve(suiteFlag === undefined || suiteFlag === '' ? 'benchmarks' : suiteFlag),
 		split,
 		blueprintPath: resolveFileFlag(args.flags['blueprint'], repoPath, 'loom.json'),
 		deploymentPath: resolveFileFlag(args.flags['deployment'], repoPath, 'loom.deployment.json'),
 		repetitions,
+		keepWorkspaces,
 		resultsDirectory: path.join(repoPath, '.loom', 'bench'),
 		env: process.env,
 		fetch: (url, init) => fetch(url, init),

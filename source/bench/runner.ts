@@ -56,6 +56,8 @@ export interface SuiteRunOptions {
 	readonly blueprintPath: string
 	readonly deploymentPath: string
 	readonly repetitions: number
+	/** Keep each benchmark's sandbox instead of deleting it, so its run stays openable. */
+	readonly keepWorkspaces: boolean
 }
 
 export async function runSuite(
@@ -107,10 +109,24 @@ async function runOnce(
 	const created = dependencies.sandbox.create(workspaceSource)
 
 	if (created.kind !== 'ok') {
-		return outcome(spec.id, repetition, 'error', 0, [created.message], null, 0, elapsedSeconds(dependencies, startedAt))
+		return outcome({
+			benchmark: spec.id,
+			repetition,
+			status: 'error',
+			score: 0,
+			reasons: [created.message],
+			runId: null,
+			workspace: null,
+			costUsd: 0,
+			wallTimeSeconds: elapsedSeconds(dependencies, startedAt),
+		})
 	}
 
 	const workspace = created.value
+	// Kept for the same reason the run's record is: a suite that discards its
+	// workspaces leaves nothing to look at when a benchmark fails for a reason
+	// nobody can see from the outcome line.
+	const kept = options.keepWorkspaces ? workspace : null
 	try {
 		const run = await dependencies.runTask({
 			workspace,
@@ -121,13 +137,33 @@ async function runOnce(
 		const wallTimeSeconds = elapsedSeconds(dependencies, startedAt)
 
 		if (run.status !== 'success') {
-			return outcome(spec.id, repetition, 'error', 0, [`the run finished ${run.status}`], run.runId, run.costUsd, wallTimeSeconds)
+			return outcome({
+				benchmark: spec.id,
+				repetition,
+				status: 'error',
+				score: 0,
+				reasons: [`the run finished ${run.status}`],
+				runId: run.runId,
+				workspace: kept,
+				costUsd: run.costUsd,
+				wallTimeSeconds,
+			})
 		}
 
 		// Before the validation, not after: a workspace the run did not produce is
 		// not evidence of anything, so reading it would be worse than useless.
 		if (run.reasons.length > 0) {
-			return outcome(spec.id, repetition, 'error', 0, run.reasons, run.runId, run.costUsd, wallTimeSeconds)
+			return outcome({
+				benchmark: spec.id,
+				repetition,
+				status: 'error',
+				score: 0,
+				reasons: run.reasons,
+				runId: run.runId,
+				workspace: kept,
+				costUsd: run.costUsd,
+				wallTimeSeconds,
+			})
 		}
 
 		const observation = dependencies.runValidation(workspace, spec.validation)
@@ -136,28 +172,41 @@ async function runOnce(
 		// The command is the contract. There is no layer above it: a run whose
 		// checks fail is a failure, and a run whose checks pass is a pass.
 		if (evaluated.status === 'fail') {
-			return outcome(spec.id, repetition, 'fail', 0, evaluated.reasons, run.runId, run.costUsd, wallTimeSeconds)
+			return outcome({
+				benchmark: spec.id,
+				repetition,
+				status: 'fail',
+				score: 0,
+				reasons: evaluated.reasons,
+				runId: run.runId,
+				workspace: kept,
+				costUsd: run.costUsd,
+				wallTimeSeconds,
+			})
 		}
 
-		return outcome(spec.id, repetition, 'pass', 1, [], run.runId, run.costUsd, wallTimeSeconds)
+		return outcome({
+				benchmark: spec.id,
+				repetition,
+				status: 'pass',
+				score: 1,
+				reasons: [],
+				runId: run.runId,
+				workspace: kept,
+				costUsd: run.costUsd,
+				wallTimeSeconds,
+			})
 	} finally {
 		// Teardown runs on every path, including a thrown error: a leaked
-		// workspace is a bug, and a suite run creates one per repetition.
-		dependencies.sandbox.remove(workspace)
+		// workspace is a bug, and a suite run creates one per repetition — unless
+		// the caller asked to keep them, which is the only way to inspect a run
+		// whose outcome line does not explain itself.
+		if (!options.keepWorkspaces) dependencies.sandbox.remove(workspace)
 	}
 }
 
-function outcome(
-	benchmark: string,
-	repetition: number,
-	status: BenchmarkOutcome['status'],
-	score: 0 | 1,
-	reasons: readonly string[],
-	runId: string | null,
-	costUsd: number,
-	wallTimeSeconds: number,
-): BenchmarkOutcome {
-	return { benchmark, repetition, status, score, reasons, runId, costUsd, wallTimeSeconds }
+function outcome(fields: BenchmarkOutcome): BenchmarkOutcome {
+	return fields
 }
 
 function elapsedSeconds(dependencies: SuiteRunnerDependencies, startedAt: number): number {
