@@ -8,7 +8,9 @@
  */
 
 import * as path from 'node:path'
+import { ValidationError } from '../errors.ts'
 import type { FileSystem } from '../fs.ts'
+import { isRecord } from '../guards.ts'
 import { authorize } from './auth.ts'
 import type { RouteDependencies } from './routes.ts'
 import { handleApi } from './routes.ts'
@@ -50,31 +52,44 @@ export async function startServer(
 	dependencies: ServerDependencies,
 	options: { readonly port: number; readonly hostname: string },
 ): Promise<ServerHandle> {
-	const server = Bun.serve({
-		port: options.port,
-		hostname: options.hostname,
-		fetch: async (request: Request): Promise<Response> => {
-			const url = new URL(request.url)
+	let server: ReturnType<typeof Bun.serve>
+	try {
+		server = Bun.serve({
+			port: options.port,
+			hostname: options.hostname,
+			fetch: async (request: Request): Promise<Response> => {
+				const url = new URL(request.url)
 
-			if (!url.pathname.startsWith('/api/')) {
-				const asset = STATIC_FILES[url.pathname]
-				if (asset === undefined) return new Response('not found', { status: 404 })
-				const file = dependencies.fs.readTextFile(path.join(dependencies.staticRoot, asset.file))
-				if (file.kind !== 'ok') return new Response(`the UI asset is missing: ${asset.file}`, { status: 500 })
-				return new Response(file.text, { headers: { 'content-type': asset.type } })
-			}
+				if (!url.pathname.startsWith('/api/')) {
+					const asset = STATIC_FILES[url.pathname]
+					if (asset === undefined) return new Response('not found', { status: 404 })
+					const file = dependencies.fs.readTextFile(path.join(dependencies.staticRoot, asset.file))
+					if (file.kind !== 'ok') return new Response(`the UI asset is missing: ${asset.file}`, { status: 500 })
+					return new Response(file.text, { headers: { 'content-type': asset.type } })
+				}
 
-			const permitted = authorize(request, dependencies.token)
-			if (permitted.kind !== 'ok') return Response.json({ error: permitted.reason }, { status: 401 })
+				const permitted = authorize(request, dependencies.token)
+				if (permitted.kind !== 'ok') return Response.json({ error: permitted.reason }, { status: 401 })
 
-			const body = request.method === 'POST' ? await readBody(request) : null
-			const response = handleApi(
-				{ method: request.method, pathname: url.pathname, query: url.searchParams, body },
-				dependencies.routes,
+				const body = request.method === 'POST' ? await readBody(request) : null
+				const response = handleApi(
+					{ method: request.method, pathname: url.pathname, query: url.searchParams, body },
+					dependencies.routes,
+				)
+				return Response.json(response.body, { status: response.status })
+			},
+		})
+	} catch (error) {
+		// A port already taken is an ordinary configuration mistake, not a crash,
+		// and the operator deserves the sentence rather than the stack trace.
+		if (isRecord(error) && error['code'] === 'EADDRINUSE') {
+			throw new ValidationError(
+				'--port',
+				`${String(options.port)} is already in use; choose another, or stop what is listening on it`,
 			)
-			return Response.json(response.body, { status: response.status })
-		},
-	})
+		}
+		throw error
+	}
 
 	return {
 		port: server.port ?? options.port,

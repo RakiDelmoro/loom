@@ -11,9 +11,10 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import * as path from 'node:path'
 import { createNodeFileSystem } from './node-fs.ts'
+import { ValidationError } from './errors.ts'
 import { generateRunId, runTask } from './run-task.ts'
 import { createRunControl } from './runs/control.ts'
-import { serve } from './serve.ts'
+import { serve, type ServeHandle, type ServeOptions } from './serve.ts'
 
 const AGENT_MANIFEST = {
 	name: 'agent',
@@ -214,24 +215,51 @@ for (const task of ['write the notes file', 'delegate the summary to the worker'
 	process.stdout.write(`  ${outcome.status}  ${task}\n`)
 }
 
-const handle = await serve({
+const serveOptions = {
 	repoPath: repo,
 	blueprintPath: path.join(repo, 'loom.json'),
 	deploymentPath: path.join(repo, 'loom.deployment.json'),
 	hostname: '127.0.0.1',
-	port,
 	token: process.env['LOOM_TOKEN'] ?? null,
-	autonomy: 'auto',
+	autonomy: 'auto' as const,
 	fs,
 	env: {},
-	fetch: (url, init) => fetch(url, init),
+	fetch: (url: string, init?: RequestInit) => fetch(url, init),
 	write: () => {},
-})
+}
+
+/**
+ * Binds the UI server.
+ *
+ * The default port is a suggestion: if it is taken, take any free one and say
+ * where we landed, because the printed URL is authoritative. A port the operator
+ * asked for by name is not overridden — they meant it.
+ */
+async function bindServer(
+	options: Omit<ServeOptions, 'port'>,
+	requestedPort: number,
+	allowFallback: boolean,
+): Promise<{ readonly handle: ServeHandle; readonly displaced: boolean }> {
+	try {
+		return { handle: await serve({ ...options, port: requestedPort }), displaced: false }
+	} catch (error) {
+		if (!(error instanceof ValidationError)) throw error
+		if (!allowFallback) {
+			process.stderr.write(`\n  ${error.message}\n\n`)
+			process.exit(1)
+		}
+		return { handle: await serve({ ...options, port: 0 }), displaced: true }
+	}
+}
+
+const bound = await bindServer(serveOptions, port, portIndex === -1)
+const handle = bound.handle
 
 process.stdout.write(
 	[
 		'',
 		`  Loom demo — repository ${repo}`,
+		...(bound.displaced ? [`  (port ${String(port)} was busy, so this is on another one)`] : []),
 		`  open ${handle.url}`,
 		'',
 		'  Two runs are already recorded. Start another from the box at the bottom;',

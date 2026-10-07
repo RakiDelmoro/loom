@@ -73,6 +73,8 @@ Not yet built: `/cancel`, `GET|PUT /api/blueprint`, `/api/config`, and the WebSo
 
 One page, served from `source/server/static/`, with **no build step** — `index.html`, `app.js`, `styles.css`, and nothing to compile. It polls, because the API is already the authority on what happened and a second channel that pushes would be a second version of the truth.
 
+`bun source/demo.ts` is the way to see it working without a model endpoint: it builds a throwaway repository, starts a stub model, records two runs, and serves the UI. The default port is a suggestion — if it is taken the demo binds a free one and prints where it landed; a port asked for with `--port` is never overridden, and a taken one is reported as a sentence rather than a stack trace.
+
 Three regions:
 
 - **Runs** — list with status, task, and cost, newest first.
