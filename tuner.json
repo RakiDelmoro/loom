@@ -10,7 +10,7 @@
 	"repetitions": 1,
 
 	"bigModel": {
-		"provider": "anthropic",
-		"model": "claude-sonnet-4"
+		"provider": "together",
+		"model": "deepseek-ai/DeepSeek-V4.1-Flash"
 	}
 }

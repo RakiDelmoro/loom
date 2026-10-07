@@ -92,13 +92,13 @@
 	],
 	"routing": {
 		"reasoner": {
-			"provider": "anthropic",
-			"model": "claude-sonnet-4",
+			"provider": "together",
+			"model": "deepseek-ai/DeepSeek-V4.1-Flash",
 			"temperature": 0.2
 		},
 		"worker": {
-			"provider": "local",
-			"model": "qwen3-coder-30b",
+			"provider": "together",
+			"model": "deepseek-ai/DeepSeek-V4.1-Flash",
 			"temperature": 0.1
 		}
 	},

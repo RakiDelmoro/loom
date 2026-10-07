@@ -41,7 +41,7 @@ benchmarks/
 {
   "optimization": ["fix_off_by_one", "fix_import_path", "implement_clamp", "add_default_parameter"],
   "heldOut": ["fix_string_case", "add_export"],
-  "judge": { "provider": "anthropic", "model": "claude-sonnet-4" }  // optional
+  "judge": { "provider": "together", "model": "deepseek-ai/DeepSeek-V4.1-Flash" }  // optional
 }
 ```
 

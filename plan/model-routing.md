@@ -37,17 +37,17 @@ interface Provider {
 
 Every provider returns the **same** shape, so the engine never branches on vendor. Failures are typed results, not exceptions: `unavailable`, `timeout`, `rate_limited`, `invalid_response`.
 
-### `openai-compatible` (the workhorse)
+### `openai-compatible` (the only client)
 
-`POST {baseUrl}/chat/completions` with `tools`. Covers OpenAI, llama.cpp server, Ollama, vLLM, LM Studio, OpenRouter, and most cloud gateways. This one client is why the local/cloud split is cheap to build — the same code talks to a laptop and to a frontier API.
+`POST {baseUrl}/chat/completions` with `tools`. Covers OpenAI, llama.cpp server, Ollama, vLLM, LM Studio, OpenRouter, Together, and most cloud gateways. This one client is why the local/cloud split is cheap to build — the same code talks to a laptop and to a frontier API.
 
-### `anthropic`
-
-`POST {baseUrl}/v1/messages`, mapping tool definitions and tool-use blocks to the same `ChatResponse`. Needed for first-class support of the strongest reasoning models.
+The response parser is deliberately tolerant of the shapes gateways actually send: a `null` `content` alongside tool calls, reasoning under `reasoning_content`, and cached prompt tokens under `prompt_tokens_details.cached_tokens` for honest cost accounting.
 
 ### `fake`
 
 A scripted provider for tests: a queue of responses, optional artificial latency, deterministic usage numbers. **All unit tests use it.** No test hits the network.
+
+**An Anthropic-native client is not built.** Anthropic's messages API differs enough to need its own mapping (`/v1/messages`, tool-use blocks), and the OpenAI-compatible client cannot reach it. Every provider in a deployment file must be one an OpenAI-compatible endpoint sits behind — a provider name is not a client.
 
 ---
 
@@ -58,19 +58,20 @@ The Blueprint names **profiles**; the deployment resolves them.
 ```jsonc
 // loom.json (Blueprint) — behavior only
 "routing": {
-  "reasoner":   { "provider": "anthropic", "model": "claude-sonnet-4", "temperature": 0.2 },
-  "worker":     { "provider": "local",     "model": "qwen3-coder-30b", "temperature": 0.1 },
-  "summarizer": { "provider": "local",     "model": "qwen3-4b",        "temperature": 0.0 }
+  "reasoner":   { "provider": "together", "model": "deepseek-ai/DeepSeek-V4.1-Flash", "temperature": 0.2 },
+  "worker":     { "provider": "together", "model": "deepseek-ai/DeepSeek-V4-Flash-0731", "temperature": 0.1 },
+  "summarizer": { "provider": "local",    "model": "qwen3-4b",                        "temperature": 0.0 }
 }
 
 // loom.deployment.json — endpoints, credentials, prices
 "providers": {
-  "anthropic": { "baseUrl": "https://api.anthropic.com", "apiKeyEnv": "ANTHROPIC_API_KEY" },
-  "local":     { "baseUrl": "http://localhost:8080/v1" }
+  "together": { "baseUrl": "https://api.together.ai/v1", "apiKeyEnv": "TOGETHER_API_KEY" },
+  "local":    { "baseUrl": "http://localhost:8080/v1" }
 },
 "prices": {
-  "claude-sonnet-4": { "inputPer1M": 3.00, "cachedInputPer1M": 0.30, "outputPer1M": 15.00 },
-  "qwen3-coder-30b": { "inputPer1M": 0.00, "cachedInputPer1M": 0.00, "outputPer1M": 0.00 }
+  "deepseek-ai/DeepSeek-V4.1-Flash":     { "inputPer1M": 0.30, "cachedInputPer1M": 0.006, "outputPer1M": 1.20 },
+  "deepseek-ai/DeepSeek-V4-Flash-0731":  { "inputPer1M": 0.14, "cachedInputPer1M": 0.03,  "outputPer1M": 0.28 },
+  "qwen3-4b":                             { "inputPer1M": 0.00, "cachedInputPer1M": 0.00,  "outputPer1M": 0.00 }
 }
 ```
 

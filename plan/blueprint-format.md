@@ -86,9 +86,9 @@ Manifests declare `name`, `description`, and JSON-Schema `parameters`. The engin
 
 ```jsonc
 "routing": {
-  "reasoner":   { "provider": "anthropic", "model": "claude-sonnet-4", "temperature": 0.2 },
-  "worker":     { "provider": "local",     "model": "qwen3-coder-30b", "temperature": 0.1 },
-  "summarizer": { "provider": "local",     "model": "qwen3-4b",        "temperature": 0.0 }
+  "reasoner":   { "provider": "together", "model": "deepseek-ai/DeepSeek-V4.1-Flash", "temperature": 0.2 },
+  "worker":     { "provider": "together", "model": "deepseek-ai/DeepSeek-V4-Flash-0731", "temperature": 0.1 },
+  "summarizer": { "provider": "local",    "model": "qwen3-4b",                        "temperature": 0.0 }
 }
 ```
 
@@ -152,8 +152,8 @@ Display-only metadata so a swapped Blueprint re-flavors the UI with no frontend 
   },
   "tools": ["tools/read_file.json", "tools/write_file.json", "tools/list_dir.json", "tools/glob.json", "tools/search.json", "tools/run_shell.json", "tools/git_status.json", "tools/git_diff.json", "tools/finish.json", "tools/agent.json"],
   "routing": {
-    "reasoner": { "provider": "anthropic", "model": "claude-sonnet-4", "temperature": 0.2 },
-    "worker":   { "provider": "local",     "model": "qwen3-coder-30b", "temperature": 0.1 }
+    "reasoner": { "provider": "together", "model": "deepseek-ai/DeepSeek-V4.1-Flash", "temperature": 0.2 },
+    "worker":   { "provider": "together", "model": "deepseek-ai/DeepSeek-V4-Flash-0731", "temperature": 0.1 }
   },
   "budgets": { "maxAgentDepth": 6, "maxConcurrentAgents": 8, "toolTimeoutSeconds": 60 },
   "permissions": { "mode": "workspace-write" }

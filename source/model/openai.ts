@@ -14,7 +14,7 @@ import type { ChatRequest, ChatResult, FinishReason, Message, Provider, ToolCall
 export type FetchLike = (url: string, init: RequestInit) => Promise<Response>
 
 export interface OpenAiCompatibleOptions {
-	/** Identifies this provider in logs and manifests, e.g. `local` or `anthropic`. */
+	/** Identifies this provider in logs and manifests, e.g. `local` or `together`. */
 	readonly id: string
 	/** Base URL *without* the trailing `/chat/completions`, e.g. `http://localhost:8080/v1`. */
 	readonly baseUrl: string
