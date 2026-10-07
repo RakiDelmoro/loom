@@ -89,6 +89,7 @@ export function createBranchManager(
 
 		create(branchId: string, changes: readonly BlueprintChange[], baselineGuildPath: string): OpResult<LoadedBlueprint> {
 			const guildPath = path.join(branchRoot(branchId), 'guild')
+			let loaded: LoadedBlueprint
 			dependencies.removeDirectory(branchRoot(branchId))
 			fs.ensureDirectory(guildPath)
 			copyFiles(baselineGuildPath, guildPath, readBlueprintFiles(fs, baselineGuildPath))
@@ -103,13 +104,30 @@ export function createBranchManager(
 			}
 
 			try {
-				return ok(loadBlueprint({ readTextFile: fs.readTextFile }, path.join(guildPath, BLUEPRINT_FILE)))
+				loaded = loadBlueprint({ readTextFile: fs.readTextFile }, path.join(guildPath, BLUEPRINT_FILE))
 			} catch (error) {
 				// A candidate that does not load is an ordinary outcome of a search,
 				// not a fault: it is dropped, with its reason recorded.
 				if (error instanceof ValidationError) return failed(error.message)
 				throw error
 			}
+
+			// A change to a path the Blueprint does not reference is written and then
+			// read by nothing, so the candidate is the baseline plus a stray file —
+			// a no-op that scores identically and looks like a hypothesis that did
+			// not help. Three cycles of the Tuner evaluated exactly that, in silence,
+			// because the proposer guessed the Blueprint's filename.
+			const referenced = new Set(readBlueprintFiles(fs, guildPath))
+			for (const change of changes) {
+				if (!referenced.has(change.path)) {
+					return failed(
+						`"${change.path}" is not referenced by the Blueprint, so changing it would have no effect. ` +
+							`The Blueprint document is ${BLUEPRINT_FILE}, and the files a change may name are: ${[...referenced].sort().join(', ')}`,
+					)
+				}
+			}
+
+			return ok(loaded)
 		},
 
 		remove(branchId: string): void {

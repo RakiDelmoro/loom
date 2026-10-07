@@ -79,7 +79,14 @@ function renderProposalRequest(context: ProposalContext): string {
 					.map((line) => `- ${line}`)
 					.join('\n')}`
 
-	return `The current Blueprint:\n\n${context.blueprint}${catalog}\n\n${failures}`
+	const editable =
+		context.editableFiles.length === 0
+			? ''
+			: `\n\nThese are the only files a change may name, relative to the Blueprint directory:\n${context.editableFiles
+					.map((file) => `- ${file}`)
+					.join('\n')}\nA change to any other path is written and then read by nothing, so the candidate is discarded.`
+
+	return `The current Blueprint:\n\n${context.blueprint}${editable}${catalog}\n\n${failures}`
 }
 
 /**

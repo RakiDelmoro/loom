@@ -103,11 +103,44 @@ describe('create', () => {
 		expect(branch.create('h-escape', [escape], '/repo').kind).toBe('failed')
 	})
 
-	test('a change may add a file the baseline did not have', () => {
+	test('a change to a path the Blueprint does not reference is refused, not silently ignored', () => {
+		// The bug this defends against: the proposer guessed the Blueprint's
+		// filename — 'blueprint.json' for 'loom.json' — so every candidate was the
+		// baseline plus a file nothing read. Each scored identically and looked like
+		// a hypothesis that did not help. Three cycles ran that way in silence.
+		const { branch } = createHarness()
+		const result = branch.create('h-noop', [{ path: 'blueprint.json', content: '{}' }], '/repo')
+
+		expect(result.kind).toBe('failed')
+		if (result.kind === 'failed') {
+			expect(result.message).toContain('not referenced by the Blueprint')
+			// The message has to say what the files are, or the next guess is as bad.
+			expect(result.message).toContain(BLUEPRINT_FILE)
+			expect(result.message).toContain('prompts/coder.md')
+		}
+	})
+
+	test('a change may add a file the baseline did not have, when the Blueprint references it', () => {
 		const { memory, branch } = createHarness()
-		const result = branch.create('h-new', [{ path: 'prompts/coder.md', content: 'Use prompts/extra.md.\n' }], '/repo')
+		// A test fixture, so the shape is asserted once here rather than parsed.
+		const blueprint = JSON.parse(guildFiles()['/repo/loom.json'] ?? '{}') as {
+			roles: Record<string, { prompt: string; model: string; tools: string[] }>
+		}
+		const orchestrator = blueprint.roles['orchestrator']
+		if (orchestrator === undefined) throw new Error('the fixture has no orchestrator')
+		orchestrator.prompt = 'prompts/extra.md'
+
+		const result = branch.create(
+			'h-new',
+			[
+				{ path: BLUEPRINT_FILE, content: JSON.stringify(blueprint) },
+				{ path: 'prompts/extra.md', content: 'You are the orchestrator, briefly.\n' },
+			],
+			'/repo',
+		)
+
 		expect(result.kind).toBe('ok')
-		expect(memory.files.get(`${WORKSPACE}/branches/h-new/guild/prompts/coder.md`)).toBe('Use prompts/extra.md.\n')
+		expect(memory.files.get(`${WORKSPACE}/branches/h-new/guild/prompts/extra.md`)).toBe('You are the orchestrator, briefly.\n')
 	})
 })
 

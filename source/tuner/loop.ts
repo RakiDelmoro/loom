@@ -15,7 +15,7 @@ import { loadBlueprint } from '../blueprint/load.ts'
 import type { Split, SuiteResult } from '../bench/types.ts'
 import type { FileSystem } from '../fs.ts'
 import type { OpResult } from '../result.ts'
-import type { BranchManager } from './branch.ts'
+import { readBlueprintFiles, type BranchManager } from './branch.ts'
 import { compare } from './compare.ts'
 import { contractViolations, type ContractView } from './contract.ts'
 import { advance, shouldTerminate, type Termination } from './guardrails.ts'
@@ -25,6 +25,13 @@ import type { BlueprintChange, BranchOutcome, CycleReport, HeldOutGate, Hypothes
 export interface ProposalContext {
 	readonly blueprint: string
 	readonly failingBenchmarks: readonly string[]
+	/**
+	 * The files a change may name — the Blueprint document and everything it
+	 * references. A proposer that does not know the Blueprint's filename guesses
+	 * one, writes a file nothing reads, and produces a candidate identical to the
+	 * baseline.
+	 */
+	readonly editableFiles: readonly string[]
 	/**
 	 * The models the deployment prices, with what each costs.
 	 *
@@ -113,6 +120,7 @@ async function runCycle(
 
 	const proposed = await dependencies.propose({
 		blueprint: blueprintText,
+		editableFiles: readBlueprintFiles(dependencies.fs, config.guildPath),
 		pricedModels: dependencies.pricedModels,
 		failingBenchmarks: baseline.benchmarks
 			.filter((summary) => summary.passRate < 1)

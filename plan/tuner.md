@@ -74,6 +74,12 @@ A branch holds **exactly the files the Blueprint references** — the document, 
 
 Every branch is validated with the **same loader a run uses**, so a candidate that cannot run is never evaluated — and a candidate that loads will behave in a benchmark exactly as it would in production.
 
+**A change to a path the Blueprint does not reference is refused, not written.** Such a file is read by nothing, so the candidate is the baseline plus a stray file — a no-op that scores identically and reads as a hypothesis that did not help. It is the most expensive kind of bug this system can have, because the search appears to run: three real cycles were spent evaluating candidates the proposer had aimed at `blueprint.json` when the document is `loom.json`, and every verdict was a verdict about the baseline. Two changes came out of it. The branch manager now fails such a candidate by name, listing the files a change may target. And the proposal prompt is given that list, because a proposer that has to guess its own configuration's filename will guess wrong.
+
+### The prompt is told what it may edit
+
+The proposer receives the Blueprint document, **the exact files a change may name**, and the models the deployment prices. Each of those was added after a cycle failed for the want of it. A model asked to name a cheaper route it has never heard of cannot; a model asked to edit "the Blueprint" without being told which file that is writes a new one. Neither is a reasoning failure — both are the harness withholding a fact the model had no way to obtain.
+
 ---
 
 ## 4. Scoring and comparison

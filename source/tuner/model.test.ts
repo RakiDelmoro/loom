@@ -13,7 +13,12 @@ import { createChangeMerger, createHypothesisProposer, extractJson } from './mod
  * from a reply that was never JSON, and one the first real Tuner cycle hit.
  */
 
-const PROPOSAL = { blueprint: '{"entryRole": "orchestrator"}', failingBenchmarks: [], pricedModels: [] }
+const PROPOSAL = {
+	blueprint: '{"entryRole": "orchestrator"}',
+	failingBenchmarks: [],
+	pricedModels: [],
+	editableFiles: ['loom.json'],
+}
 
 function truncated(): ChatResult {
 	return {
@@ -48,6 +53,38 @@ describe('the hypothesis proposer', () => {
 		const result = await propose(PROPOSAL)
 		expect(result.kind).toBe('failed')
 		if (result.kind === 'failed') expect(result.message).toBe('the proposer did not reply with JSON')
+	})
+
+	test('the request names the files a change may edit, and the Blueprint document itself', async () => {
+		// Without this the proposer guesses the Blueprint's filename, writes a file
+		// nothing reads, and produces a candidate identical to the baseline.
+		const provider = createFakeProvider([textResponse('not json')])
+		const propose = createHypothesisProposer({ provider, model: 'big' })
+		await propose({
+			blueprint: '{}',
+			failingBenchmarks: [],
+			pricedModels: [],
+			editableFiles: ['loom.json', 'prompts/coder.md'],
+		})
+
+		const sent = provider.calls[0]?.messages.find((message) => message.role === 'user')?.content ?? ''
+		expect(sent).toContain('loom.json')
+		expect(sent).toContain('prompts/coder.md')
+		expect(sent).toContain('read by nothing')
+	})
+
+	test('the request names the models the deployment prices', async () => {
+		const provider = createFakeProvider([textResponse('not json')])
+		const propose = createHypothesisProposer({ provider, model: 'big' })
+		await propose({
+			blueprint: '{}',
+			failingBenchmarks: [],
+			editableFiles: [],
+			pricedModels: ['cheap-model — $0.1 in / $0.2 out per 1M'],
+		})
+
+		const sent = provider.calls[0]?.messages.find((message) => message.role === 'user')?.content ?? ''
+		expect(sent).toContain('cheap-model — $0.1 in / $0.2 out per 1M')
 	})
 
 	test('a fenced JSON reply is accepted', async () => {
