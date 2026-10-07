@@ -82,6 +82,45 @@ describe('acceptedBranches', () => {
 		const b = agent({ agentId: 'coder-1-3', branch: 'loom/run-1/coder-1-3', task: 'b' })
 		expect(acceptedBranches(manifest([a, b]))).toEqual(['loom/run-1/coder-1-2', 'loom/run-1/coder-1-3'])
 	})
+
+	test("a child's work is not landed twice: it is already inside its caller's branch", () => {
+		// Integrating a child merges its branch into the caller's workspace, so the
+		// caller's branch already contains the child's work. Landing the child again
+		// sends the same change at the base a second time — against a base that has
+		// moved — and the second merge conflicts arithmetically.
+		//
+		// This is how `fix_shared_mutation` failed with a branch that had succeeded
+		// and been accepted: orchestrator-0-1 and coder-1-3 both successful, both
+		// merged into the base, CONFLICT in the two files the coder had just fixed.
+		const caller = agent({
+			agentId: 'orchestrator-0-1',
+			role: 'orchestrator',
+			parentId: null,
+			depth: 0,
+			branch: 'loom/run-1/orchestrator-0-1',
+			sha: 'sha1',
+		})
+		const callee = agent({ agentId: 'coder-1-2', branch: 'loom/run-1/coder-1-2', sha: 'sha2' })
+
+		expect(acceptedBranches(manifest([caller, callee]))).toEqual(['loom/run-1/orchestrator-0-1'])
+	})
+
+	test('a child still lands when its caller did not, because nothing else carries it', () => {
+		// The same rule read the other way. A failed caller's branch stays behind, so
+		// nothing else brings the child's work to the base and the child must.
+		const caller = agent({
+			agentId: 'orchestrator-0-1',
+			role: 'orchestrator',
+			parentId: null,
+			depth: 0,
+			branch: 'loom/run-1/orchestrator-0-1',
+			sha: null,
+			status: 'error',
+		})
+		const callee = agent({ agentId: 'coder-1-2', branch: 'loom/run-1/coder-1-2', sha: 'sha2' })
+
+		expect(acceptedBranches(manifest([caller, callee]))).toEqual(['loom/run-1/coder-1-2'])
+	})
 })
 
 describe('attemptKey', () => {

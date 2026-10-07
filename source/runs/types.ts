@@ -82,7 +82,7 @@ export function attemptKey(agent: {
 /**
  * The branches a run's work actually consists of.
  *
- * Two filters, both of which were missing and both of which cost real benchmarks:
+ * Three filters, each of which was missing and each of which cost real benchmarks:
  *
  * 1. **Only a successful role's work counts.** Failed attempts were being merged,
  *    so three coders that hit their turn limit had their commits land anyway.
@@ -90,6 +90,10 @@ export function attemptKey(agent: {
  *    competing edits of the same files against the same base, which conflicts
  *    arithmetically — the more persistent the loop, the less able the run was to
  *    deliver, which inverts what retrying is for.
+ * 3. **A descendant of a landed branch does not land again.** Integrating a child
+ *    merges its branch into the caller's workspace, so the caller's branch already
+ *    contains the child's work. Landing the child as well sends the same change at
+ *    the base twice, and the second merge is against a base that has moved.
  */
 export function acceptedBranches(manifest: RunManifest): string[] {
 	const lastAttempt = new Map<string, number>()
@@ -100,10 +104,31 @@ export function acceptedBranches(manifest: RunManifest): string[] {
 	}
 
 	const keep = new Set(lastAttempt.values())
+	const kept = new Set<string>()
+	for (const index of keep) {
+		const agent = manifest.agents[index]
+		if (agent !== undefined) kept.add(agent.agentId)
+	}
+
+	const parentOf = new Map<string, string | null>()
+	for (const agent of manifest.agents) parentOf.set(agent.agentId, agent.parentId)
+
+	// Walk up to the root: work flows up the delegation tree, so a branch with a
+	// landed ancestor is already carried by it. This is the whole rule — a child
+	// whose caller *failed* still lands, because nothing else brings its work.
+	const carried = (agent: AgentRecord): boolean => {
+		for (let id = parentOf.get(agent.agentId) ?? null; id !== null; id = parentOf.get(id) ?? null) {
+			if (kept.has(id)) return true
+		}
+		return false
+	}
+
 	const branches: string[] = []
 	for (const [index, agent] of manifest.agents.entries()) {
 		if (!keep.has(index)) continue
-		if (agent.branch !== null) branches.push(agent.branch)
+		if (agent.branch === null) continue
+		if (carried(agent)) continue
+		branches.push(agent.branch)
 	}
 	return branches
 }
