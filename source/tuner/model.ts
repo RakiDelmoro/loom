@@ -47,6 +47,8 @@ ${CONTRACT_RULES}
 
 A proposal is judged alone, and must clear the promotion margin by itself: the loop does not accumulate near-misses, so several changes that each save a few percent are all discarded. Make each hypothesis a complete change worth having on its own.
 
+**The model is fixed.** This search tunes the conditions a single model works under — its prompts, its roles, its tools, its budgets, its delegation topology, its temperature. The point is to find out what makes *that* model effective, so a candidate that changes which model a role runs on is rejected before it is evaluated. A win that came from a different model would teach nothing.
+
 Propose few, concrete, testable changes. Vague wording tweaks are worthless.`
 
 const MERGE_SYSTEM = `You combine several accepted edits to a Blueprint into one coherent set.
@@ -83,14 +85,14 @@ function renderProposalRequest(context: ProposalContext): string {
 			: `Providers this deployment declares:\n${context.providers.map((name) => `- ${name}`).join('\n')}`,
 		context.pricedModels.length === 0
 			? null
-			: `Models it prices, which are the only ones a routing change may name:\n${context.pricedModels
+			: `What those models cost, for reasoning about turns and tokens — NOT a menu to route onto, because the model a role runs on is fixed:\n${context.pricedModels
 					.map((line) => `- ${line}`)
 					.join('\n')}`,
 	].filter((section) => section !== null)
 	const catalog =
 		menu.length === 0
 			? ''
-			: `\n\n${menu.join('\n\n')}\n\nA routing profile is a provider and a model together, and the deployment is what knows which provider serves which model. Prefer a pair you have seen working in the Blueprint above.`
+			: `\n\n${menu.join('\n\n')}\n\nEvery routing profile must keep naming the model the baseline already runs. Fewer turns and shorter prompts cost less; a different model is not on the table.`
 
 	const editable =
 		context.editableFiles.length === 0

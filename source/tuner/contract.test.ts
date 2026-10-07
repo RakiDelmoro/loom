@@ -8,6 +8,10 @@ function view(overrides: Partial<ContractView> = {}): ContractView {
 			reviewer: { tools: ['read_file', 'finish'], isolation: 'shared' },
 		},
 		permissions: { mode: 'workspace-write' },
+		routing: {
+			reasoner: { provider: 'together', model: 'big-model' },
+			worker: { provider: 'together', model: 'big-model' },
+		},
 		...overrides,
 	}
 }
@@ -94,5 +98,51 @@ describe('contractViolations', () => {
 		expect(contractViolations(view(), candidate)).toEqual([
 			'role "helper" can change the workspace but is not worktree-isolated',
 		])
+	})
+})
+
+describe('the pinned model', () => {
+	test('editing a profile to a model the baseline does not run is refused', () => {
+		const candidate = view({ routing: { worker: { provider: 'together', model: 'cheap-model' } } })
+		const violations = contractViolations(view(), candidate)
+
+		expect(violations).toHaveLength(1)
+		expect(violations[0]).toContain('together/cheap-model')
+		expect(violations[0]).toContain('pinned to together/big-model')
+	})
+
+	test('adding a profile that points elsewhere is the same move, and is refused', () => {
+		// The longer route around the rule: leave the existing profile alone and
+		// give a role a new one. Checking the candidate's profiles rather than the
+		// edits covers both.
+		const candidate = view({
+			routing: {
+				reasoner: { provider: 'together', model: 'big-model' },
+				worker: { provider: 'together', model: 'big-model' },
+				'worker-cheap': { provider: 'together', model: 'cheap-model' },
+			},
+		})
+		expect(contractViolations(view(), candidate)).toHaveLength(1)
+	})
+
+	test('changing the provider under the same model name is refused', () => {
+		const candidate = view({ routing: { reasoner: { provider: 'local', model: 'big-model' } } })
+		expect(contractViolations(view(), candidate)).toHaveLength(1)
+	})
+
+	test('a profile the baseline already runs may be reshaped as long as the model is kept', () => {
+		// A role moving onto the other profile is a setup decision — both name the
+		// same model, so nothing about the model changed.
+		const candidate = view({
+			routing: {
+				reasoner: { provider: 'together', model: 'big-model' },
+				summarizer: { provider: 'together', model: 'big-model' },
+			},
+		})
+		expect(contractViolations(view(), candidate)).toEqual([])
+	})
+
+	test('an unchanged model is admissible', () => {
+		expect(contractViolations(view(), view())).toEqual([])
 	})
 })

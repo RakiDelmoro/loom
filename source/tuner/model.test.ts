@@ -108,6 +108,18 @@ describe('the hypothesis proposer', () => {
 		expect(sent).toContain('together')
 	})
 
+	test('the system prompt says the model is fixed', async () => {
+		// A proposer that does not know the model is pinned will spend hypotheses on
+		// routing — it did, every cycle — and the contract rejects them all.
+		const provider = createFakeProvider([textResponse('not json')])
+		const propose = createHypothesisProposer({ provider, model: 'big' })
+		await propose(PROPOSAL)
+
+		const system = provider.calls[0]?.messages.find((message) => message.role === 'system')?.content ?? ''
+		expect(system).toContain('The model is fixed')
+		expect(system).toContain('rejected before it is evaluated')
+	})
+
 	test('a fenced JSON reply is accepted', async () => {
 		const hypothesis = {
 			id: 'h-001',

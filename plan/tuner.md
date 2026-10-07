@@ -52,10 +52,13 @@ An edit is the **complete new file content**, never a patch: no patch engine, an
 - It may **not** touch the deployment file, credentials, or prices — that file lives outside the guild directory, so a candidate cannot reach a secret or a price by construction.
 - It may **not** weaken `permissions.mode`.
 - It may **not** leave a role able to change the workspace without worktree isolation.
+- It may **not** change which model a role runs on. Every profile must keep naming a model the baseline already runs — editing a profile's model and adding a profile that points elsewhere are the same move by different routes, so the rule checks the candidate's profiles rather than the edits.
 
 These are checked by the **promotion contract**, and a candidate that breaks one is rejected **before it is evaluated** — a search left to itself will trade safety for score, and refusing early means the bad idea costs no benchmark run.
 
-**Deliberately not in the contract:** granting a role a new tool. Whether a reviewer that can *edit* helps or hurts is a **quality** question, and the bench is the arbiter. The contract refuses only what is unsafe — containment and permissions — because a contract that also encodes taste would quietly freeze the design.
+**Deliberately not in the contract:** granting a role a new tool. Whether a reviewer that can *edit* helps or hurts is a **quality** question, and the bench is the arbiter.
+
+The contract refuses two kinds of thing, and the distinction is worth keeping sharp. It refuses what is **unsafe** — a weakened permission mode, a role that can write without isolation. And it refuses what would make the result **unreadable**: changing the model. Both are refusals the search should not get to argue with, and neither is taste. A contract that also encoded taste would quietly freeze the design.
 
 ---
 

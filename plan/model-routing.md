@@ -1,8 +1,12 @@
 # Model Routing
 
-Hybrid routing is one of the three founding decisions: local models for cheap/mechanical roles, cloud models for hard roles. This document specifies the provider abstraction, the routing profiles, cost accounting, and budget enforcement.
+**One model, guided by the Tuner.** This document specifies the provider abstraction, the routing profiles, cost accounting, and budget enforcement — the *mechanism* by which a Blueprint names the model it runs, and by which a role carries its own temperature.
 
-The reference implementation has **no per-role model override** — one model serves every role. Routing is the single largest cost/quality lever in a multi-agent system, so here it is a first-class concept.
+It is not a licence to split a run across models. The project's question is whether **one** model, set up well, can do real engineering work, so the Tuner's search is pinned to the model the baseline runs: a run that quietly hands its hard calls to a stronger model has answered a different question, and a candidate that wins by naming a different model has taught nothing about guiding this one.
+
+Hybrid routing — local models for cheap mechanical roles, cloud models for hard ones — remains available, and the cost case for it is below. What changed is its status: it was a founding posture, and it is now an option an operator can take deliberately, one Blueprint at a time.
+
+The mechanism earns its place even with a single model: routing is where a model is named, it carries a per-role temperature, and it is what `--model-override` overrides.
 
 ---
 
@@ -130,7 +134,9 @@ An optional `alerts` block in the Blueprint can name a dollar or token threshold
 
 ## 6. Why this matters
 
-The reference implementation's single-model design forces one of two bad outcomes: run everything on a small model (weak on hard roles) or everything on a big model (expensive on mechanical roles). Routing removes the trade-off. Concretely, a typical run's cost is dominated by a few hard calls; routing the summarizers, extractors, and formatters to a local model can cut spend by an order of magnitude at no measurable quality cost — and that is exactly the kind of change the [tuner](tuner.md) should be able to propose and measure.
+The reference implementation's single-model design forces one of two bad outcomes: run everything on a small model (weak on hard roles) or everything on a big model (expensive on mechanical roles). Routing removes the trade-off. Concretely, a typical run's cost is dominated by a few hard calls; routing the summarizers, extractors, and formatters to a local model can cut spend by an order of magnitude at no measurable quality cost.
+
+That trade is available to an **operator**, deliberately, one Blueprint at a time. It is not something the Tuner will find, because the search is pinned to one model: a saving that came from running the work on a different model would not tell you whether the setup improved, and the setup is the only thing this project is trying to learn about.
 
 ---
 

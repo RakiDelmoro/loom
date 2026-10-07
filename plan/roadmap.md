@@ -90,7 +90,7 @@ Milestones are sequential: the isolation primitive must exist before the engine 
 
 ## M4 — Hybrid routing and spend accounting
 
-**Goal.** Cheap roles on local models, hard roles on cloud, with dollar accounting that is **measured and reported but never enforced**. See [model-routing.md](model-routing.md).
+**Goal.** Routing as a **mechanism**: a model named per profile, a temperature per role, and dollar accounting that is **measured and reported but never enforced**. The project runs one model, pinned; hybrid routing stays available to an operator and is not a move the search may make. See [model-routing.md](model-routing.md).
 
 **Deliverables.**
 

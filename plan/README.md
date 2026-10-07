@@ -10,7 +10,7 @@ The design and work plan for **Loom** — a git-native, concurrent, provider-agn
 |---|---|
 | **Wedge** | Git-native concurrent core — worktree-per-agent isolation + parallel scheduler + commit/diff/rollback |
 | **Stack** | TypeScript + Bun |
-| **Models** | Hybrid routing — local models for cheap roles, cloud models for hard roles |
+| **Models** | **One model, guided by the Tuner.** Routing exists as a mechanism; the model is pinned, and the search tunes the conditions around it. |
 | **Autonomy** | `auto` — the operator is not the gate; the tests are, backed by one-command undo |
 
 ## Vocabulary

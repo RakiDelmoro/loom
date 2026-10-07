@@ -17,6 +17,14 @@ import { WORKSPACE_MUTATING_TOOLS } from '../tools/types.ts'
 export interface ContractView {
 	readonly roles: Readonly<Record<string, { readonly tools: readonly string[]; readonly isolation: IsolationMode }>>
 	readonly permissions: { readonly mode: PermissionMode }
+	/**
+	 * Model **identity** only — `provider` and `model`, never `temperature`.
+	 *
+	 * Temperature is a sampling setting, and "this role should sample tighter" is a
+	 * claim about how to guide the model. Which model it is, is not a claim the
+	 * search gets to make.
+	 */
+	readonly routing: Readonly<Record<string, { readonly provider: string; readonly model: string }>>
 }
 
 /** Weaker is later in this list. A candidate may strengthen, never weaken. */
@@ -54,6 +62,23 @@ export function contractViolations(baseline: ContractView, candidate: ContractVi
 		if (holdsMutatingTool(candidateRole.tools) && isolation !== 'worktree') {
 			violations.push(`role "${name}" can change the workspace but is not worktree-isolated`)
 		}
+	}
+
+	// The model is pinned, and this is the rule that makes the search mean
+	// something. A candidate may only name a model the baseline already runs, so a
+	// win cannot be "it used a better model" — it can only be the setup.
+	//
+	// Both routes are the same move: editing a profile's model, and adding a
+	// profile that points elsewhere and moving a role onto it. Checking the
+	// candidate's profiles against the baseline's pairs covers both, and because a
+	// single-model baseline has exactly one pair, it stays single-model.
+	const pinned = new Set(Object.values(baseline.routing).map((profile) => `${profile.provider}/${profile.model}`))
+	for (const [name, profile] of Object.entries(candidate.routing)) {
+		if (pinned.has(`${profile.provider}/${profile.model}`)) continue
+		violations.push(
+			`routing profile "${name}" names ${profile.provider}/${profile.model}, which the baseline does not run; ` +
+				`this search is pinned to ${[...pinned].join(', ')}`,
+		)
 	}
 
 	return violations
