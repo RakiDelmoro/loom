@@ -16,6 +16,8 @@ import { createNodeFileSystem } from './node-fs.ts'
 import { runTask } from './run-task.ts'
 import { runBench } from './run-bench.ts'
 import type { Split, SuiteResult } from './bench/types.ts'
+import { runTunerCommand } from './run-tuner.ts'
+import type { TunerReport } from './tuner/types.ts'
 import { createRunLifecycle } from './runs/lifecycle.ts'
 import { createRunStore } from './runs/store.ts'
 import type { AutonomyLevel, RunManifest } from './runs/types.ts'
@@ -42,6 +44,7 @@ Usage:
   loom undo   <runId> [--repo <path>]
   loom clean  <runId> [--branches] [--repo <path>]
   loom bench --suite <dir> [--split <optimization|held-out>] [--repetitions <n>]
+  loom tune [--repo <path>] [--config <file>]
 
 Commands:
   blueprint validate   Validate a Blueprint and every tool manifest it names.
@@ -53,6 +56,7 @@ Commands:
   undo                 Return the base branch to the commit the run started from.
   clean                Remove a run's worktrees, and its branches with --branches.
   bench                Score a Blueprint against a benchmark suite.
+  tune                 Improve the Blueprint against the bench, and promote what wins.
 
 Files:
   loom.json            The Blueprint: roles, tools, routing, budgets, alerts.
@@ -329,6 +333,53 @@ async function benchCommand(args: ParsedArguments): Promise<number> {
 	return 0
 }
 
+function formatTunerReport(report: TunerReport): string {
+	const percent = (value: number): string => `${(value * 100).toFixed(1)}%`
+	const lines = [
+		`guild:     ${report.guildPath}`,
+		`cycles:    ${String(report.cycles.length)}`,
+		`stopped:   ${report.terminatedBy}`,
+		`cost:      $${report.costUsd.toFixed(4)}`,
+		'',
+	]
+	for (const cycle of report.cycles) {
+		lines.push(
+			`cycle ${String(cycle.cycle)}  baseline ${percent(cycle.baselineScore)}  ${cycle.promoted ? 'PROMOTED' : 'no promotion'}  $${cycle.costUsd.toFixed(4)}`,
+		)
+		for (const branch of cycle.branches) {
+			const note = branch.invalidReason ?? (branch.contractViolations.join('; ') || branch.verdictReasons.join('; '))
+			lines.push(`  ${branch.branchId.padEnd(24)} ${(branch.valid ? branch.verdict : 'invalid').padEnd(10)} ${percent(branch.optimizationScore)}  ${note}`)
+		}
+		if (cycle.heldOut !== null) {
+			lines.push(`  held-out: ${percent(cycle.heldOut.baselineScore)} -> ${percent(cycle.heldOut.candidateScore)} (${cycle.heldOut.verdict})`)
+		}
+		lines.push('')
+	}
+	if (report.history.length > 0) {
+		lines.push('promoted baselines (newest first):')
+		for (const entry of report.history) lines.push(`  ${entry}`)
+	}
+	return `${lines.join('\n')}\n`
+}
+
+async function tuneCommand(args: ParsedArguments): Promise<number> {
+	const repoPath = resolveRepoPath(args)
+	const configFlag = args.flags['config']
+
+	const report = await runTunerCommand({
+		configPath: path.resolve(configFlag === undefined || configFlag === '' ? path.join(repoPath, 'tuner.json') : configFlag),
+		repoPath,
+		env: process.env,
+		fetch: (url, init) => fetch(url, init),
+		onEvent: (message) => {
+			process.stderr.write(`  ${message}\n`)
+		},
+	})
+
+	process.stdout.write(formatTunerReport(report))
+	return 0
+}
+
 async function main(argv: readonly string[]): Promise<number> {
 	const command = argv[0]
 
@@ -363,6 +414,8 @@ async function main(argv: readonly string[]): Promise<number> {
 			return cleanCommand(args)
 		case 'bench':
 			return benchCommand(args)
+		case 'tune':
+			return tuneCommand(args)
 		default:
 			process.stderr.write(`loom: unknown command "${command}"\n\n${USAGE}`)
 			return 2

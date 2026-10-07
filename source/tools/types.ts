@@ -35,3 +35,10 @@ export interface ToolRegistry {
 	names(): readonly string[]
 	run(name: string, args: Readonly<Record<string, unknown>>, context: ToolContext): Promise<ToolResult>
 }
+
+/**
+ * The tools that can change the workspace. Named here, not inferred, so that
+ * "this role cannot write" is a fact the engine and the Tuner's promotion
+ * contract can both check.
+ */
+export const WORKSPACE_MUTATING_TOOLS = ['write_file', 'run_shell', 'typecheck', 'test'] as const

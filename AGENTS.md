@@ -221,6 +221,7 @@ Examples: everything in `source/blueprint/parse.ts`, `parseChatCompletion` in
 loom/
 ├── loom.json          the example Blueprint
 ├── loom.deployment.json  the example deployment (providers and model prices)
+├── tuner.json         the example Tuner configuration
 ├── benchmarks/        the benchmark suite: suite.json + one directory per task
 ├── tools/             tool manifests referenced by the Blueprint
 ├── prompts/           role system prompts referenced by the Blueprint
@@ -230,11 +231,13 @@ loom/
     ├── cli-args.ts    command-line argument parsing
     ├── run-task.ts    the composition root for one run
     ├── run-bench.ts   the composition root for a suite run
+    ├── run-tuner.ts   the composition root for an optimization run
     ├── errors.ts      ValidationError, describeError
     ├── result.ts      OpResult — the outcome of a fallible operation
     ├── validation.ts  the shared validation vocabulary (expect*, rejectUnknownKeys)
     ├── fs.ts          the filesystem boundary (types only)
     ├── node-fs.ts     the real filesystem leaf
+    ├── directory-remover.ts  the recursive-delete leaf
     ├── guards.ts      the canonical isRecord guard
     ├── agent/         the agent loop and its result types
     ├── bench/         benchmark specs, the suite runner, validation, scoring, the judge
@@ -244,6 +247,7 @@ loom/
     ├── runs/          the manifest, the event log, the recorder, the lifecycle
     ├── scheduler/     the bounded pool and the agent-tree scheduler
     ├── tools/         tool types, registry, and the built-in tools
+    ├── tuner/         the optimizer: branches, the contract, verdicts, the loop, promotion
     ├── workspace/     naming, git exclude, the git leaf, the worktree manager
     └── test-support/  shared test doubles (support code, not tests)
 ```

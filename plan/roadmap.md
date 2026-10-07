@@ -135,15 +135,15 @@ Milestones are sequential: the isolation primitive must exist before the engine 
 **Deliverables.**
 
 1. **The loop** — observe → hypothesize → branch → evaluate → score → merge → report → promote → repeat, under guardrails.
-2. **Guardrails** — cycle budget, cost budget, plateau detection; no-op and regression rejection.
-3. **Held-out gate** — promotion requires improvement on the held-out split.
+2. **Guardrails** — cycle budget, the Tuner's own cost ceiling, plateau detection, and a promotion contract checked before evaluation.
+3. **Held-out gate** — the merged candidate is re-evaluated on the held-out split, and promotion requires improvement there.
 
 **Acceptance criteria.**
 
-- [ ] A full cycle runs end-to-end and produces a report.
-- [ ] A candidate improving the baseline by the configured margin is promoted; a regressing candidate never is.
-- [ ] A hypothesis producing an invalid Blueprint is dropped with the reason recorded.
-- [ ] Held-out gating blocks a candidate that overfits the tuning split.
+- [x] A full cycle runs end-to-end and produces a report.
+- [x] A candidate improving the baseline by the configured margin is promoted; a regressing candidate never is.
+- [x] A hypothesis producing an invalid Blueprint is dropped with the reason recorded.
+- [x] Held-out gating blocks a candidate that overfits the optimization split.
 
 ---
 

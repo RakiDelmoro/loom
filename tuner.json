@@ -1,0 +1,16 @@
+{
+	"suitePath": "benchmarks",
+	"guildPath": ".",
+	"deploymentPath": "loom.deployment.json",
+
+	"maxCycles": 3,
+	"maxCostUsd": 5,
+	"plateauLimit": 2,
+	"improvementMargin": 0.1,
+	"repetitions": 1,
+
+	"bigModel": {
+		"provider": "anthropic",
+		"model": "claude-sonnet-4"
+	}
+}

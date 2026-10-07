@@ -17,7 +17,7 @@ observe → hypothesize → branch → evaluate → score → merge → report �
 1. **Observe.** Read the baseline Blueprint, the bench's per-benchmark results, and the failure reasons clustered by benchmark and task type.
 2. **Hypothesize.** A large model (a routed profile) proposes concrete, testable edits, each with a motivation, a mechanism, and a predicted impact.
 3. **Branch.** Each hypothesis becomes a candidate Blueprint on disk, validated end-to-end with the Blueprint loader. An invalid candidate is **dropped with the reason recorded**, never crashed on.
-4. **Evaluate.** Run each candidate against the **tuning split** of the suite via the bench.
+4. **Evaluate.** Run each candidate against the **optimization split** of the suite via the bench.
 5. **Score.** Compare each candidate to the baseline: improved, regressed, or noise.
 6. **Merge.** Combine accepted candidates; a large model resolves conflicting edits, given the common ancestor and both diffs.
 7. **Report.** A human-readable report: hypotheses, per-branch scores, accept/reject, the new-baseline diff.
@@ -49,46 +49,44 @@ An edit is the **complete new file content**, never a patch: no patch engine, an
 
 **Constraints the loop must respect** (or the tuner will cheat):
 
-- It may **not** touch the deployment file, credentials, or prices.
-- It may **not** weaken the permission mode or the tool grants that enforce safety.
-- It may **not** edit the held-out split or the bench.
-- It may **not** add tools that bypass path confinement or the sandbox.
+- It may **not** touch the deployment file, credentials, or prices — that file lives outside the guild directory, so a candidate cannot reach a secret or a price by construction.
+- It may **not** weaken `permissions.mode`.
+- It may **not** leave a role able to change the workspace without worktree isolation.
 
-These are enforced by validating every candidate against a **promotion contract** — a set of invariants the candidate must satisfy before it can even be evaluated. A candidate that loosens a safety invariant is rejected outright.
+These are checked by the **promotion contract**, and a candidate that breaks one is rejected **before it is evaluated** — a search left to itself will trade safety for score, and refusing early means the bad idea costs no benchmark run.
+
+**Deliberately not in the contract:** granting a role a new tool. Whether a reviewer that can *edit* helps or hurts is a **quality** question, and the bench is the arbiter. The contract refuses only what is unsafe — containment and permissions — because a contract that also encodes taste would quietly freeze the design.
 
 ---
 
 ## 3. Branch management
 
-Filesystem-only, no engine imports:
+Filesystem only, and confined to the tuner's own directory:
 
 ```
 <repo>/.loom/tuner/
-├── baseline/loom.json            # current baseline (the promoted Blueprint)
-├── branches/<branchId>/
-│   ├── loom.json
-│   ├── hypothesis.json
-│   └── results.json
-├── history/<timestamp>/loom.json # every promoted baseline, never overwritten
-└── reports/<timestamp>/
-    ├── index.html
-    ├── summary.json
-    └── branches/<branchId>/{diff.txt,results.json}
+├── branches/<branchId>/guild/       # a candidate: loom.json + the prompts and tools it references
+├── history/<timestamp>/             # every replaced baseline, never overwritten
+└── reports/<timestamp>/             # index.html + summary.json
 ```
 
-Operations: `copyBaseline(branchId)`, `applyChanges(branchId, changes)`, `validate(branchId)`, `archiveBaseline()`, `restore(timestamp)`. Paths are confined to the tuner directory; escape is prevented.
+A branch holds **exactly the files the Blueprint references** — the document, each role's prompt and style guide, and each tool manifest. Not a directory copy: the guild sits inside the project it describes, and copying the directory would sweep up the repository around it.
+
+Every branch is validated with the **same loader a run uses**, so a candidate that cannot run is never evaluated — and a candidate that loads will behave in a benchmark exactly as it would in production.
 
 ---
 
 ## 4. Scoring and comparison
 
-Per candidate:
+Per candidate, against the baseline's **optimization** score:
 
-- **Improved** — held-out suite score exceeds the baseline by more than the confidence interval and the configured `improvementMargin`.
-- **Regressed** — any benchmark that the baseline passes now fails.
+- **Improved** — the candidate's interval **lower bound** clears the baseline's measured score by at least `improvementMargin`. The pessimistic reading of the candidate still has to win.
+- **Regressed** — any benchmark the baseline passed and the candidate does not, whatever the mean says. Averaging hides exactly the damage a user would notice.
 - **Noise** — everything else.
 
-Only `improved` and non-regressing candidates are eligible for merge. The margin exists so the loop chases signal, not sampling noise.
+Regression is checked first, so a candidate can never buy a higher mean by breaking something that already worked. Only `improved` candidates are eligible for merge.
+
+Once the accepted candidates are merged, the **merged** artifact is evaluated on the held-out split against the baseline's held-out score, by the same rule. Promotion requires `improved` there. Combining two good branches can still produce a bad one, so the merge is re-evaluated rather than assumed.
 
 ---
 
@@ -124,17 +122,26 @@ Every cycle writes a report a human can act on: hypothesis summaries, a branch s
 
 ---
 
-## 8. Why this is a separate program
+## 8. How the tuner is packaged
 
-The tuner is an **HTTP client** of the engine plus a **Docker/git orchestrator** plus a **big-model caller**. It never imports the engine's internals. This keeps the engine clean, makes the tuner independently testable, and means a broken tuner cannot corrupt a production run.
+The tuner is a **subcommand** — `loom tune` — in the same project as the engine, and it shares the Blueprint loader and the bench **by import**.
+
+That is a deliberate departure from "a separate program": branch validation has to be *identical* to a run's validation, and the bench has to be *identical* to the one that scores production candidates. Duplicating either would let them drift, and a drifted benchmark is worse than no benchmark.
+
+What it still does not do:
+
+- It never runs inside the serving process. It is an offline command you invoke deliberately.
+- It never touches the deployment file, passwords, or prices.
+- It cannot corrupt a run: it writes only under `.loom/tuner/`, and the baseline only through `promote`.
 
 ---
 
 ## 9. Acceptance tests (M6)
 
-- A full cycle runs end-to-end and produces a report.
-- A candidate that improves by the configured margin is promoted; a regressing candidate is never promoted.
-- A hypothesis producing an invalid Blueprint is dropped with the reason recorded.
-- A candidate that weakens a safety invariant is rejected by the promotion contract before evaluation.
-- Held-out gating blocks a candidate that overfits the tuning split.
-- `restore(timestamp)` returns the baseline to a prior state exactly.
+- [x] A full cycle runs end-to-end and produces a report.
+- [x] A candidate that improves by the configured margin is promoted; a regressing candidate is never promoted.
+- [x] A hypothesis producing an invalid Blueprint is dropped with the reason recorded.
+- [x] A candidate that weakens a safety invariant is rejected by the promotion contract **before** evaluation — and never costs a benchmark run.
+- [x] Held-out gating blocks a candidate that overfits the optimization split.
+- [x] `restore(timestamp)` returns the baseline to a prior state exactly.
+- [x] A promoted baseline is archived first, so promotion is reversible.

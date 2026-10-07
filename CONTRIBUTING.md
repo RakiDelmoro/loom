@@ -33,6 +33,7 @@ and `typescript`, and that is deliberate — see "No dependencies" in
 bun run loom --version
 bun run loom blueprint validate loom.json
 bun run loom bench --suite benchmarks --split optimization --repetitions 2
+bun run loom tune --repo .
 ```
 
 Validating the shipped Blueprint is the smoke test for the Blueprint layer:
@@ -54,6 +55,7 @@ A rejected Blueprint reports the exact path that is wrong and exits non-zero:
 loom.json      the example Blueprint (roles, tools, routing, budgets, alerts)
 loom.deployment.json  providers, endpoints, and model prices; credentials are
                named here and read from the environment, never stored
+tuner.json     the Tuner's configuration: the suite, the budgets, the big model
 tools/         tool manifests, referenced by path from the Blueprint
 prompts/       role system prompts, referenced by path from the Blueprint
 benchmarks/    the benchmark suite: suite.json + one directory per task

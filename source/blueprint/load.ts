@@ -64,7 +64,9 @@ function readRolePrompt(
 	if (guide.trim() === '') {
 		throw new ValidationError(`${blueprintPath}.roles.${name}.styleGuide`, `style guide "${role.styleGuide}" is empty`)
 	}
-	return `${prompt}\n\n${guide}`
+	// Trimmed so the documented "separated by one blank line" is literally true
+	// whatever trailing newlines the two files happen to carry.
+	return `${prompt.trimEnd()}\n\n${guide}`
 }
 
 function readText(dependencies: BlueprintLoaderDependencies, filePath: string, reportedPath: string): string {
