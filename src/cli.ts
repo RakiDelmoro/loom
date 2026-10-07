@@ -6,13 +6,13 @@
  * chooses exit codes. No logic worth testing lives here.
  */
 
-import { existsSync, readFileSync } from 'node:fs'
 import pkg from '../package.json'
-import { describeError, ValidationError } from './errors.ts'
+import { ValidationError } from './errors.ts'
 import { loadBlueprint } from './blueprint/load.ts'
-import type { ReadTextFileResult } from './blueprint/types.ts'
+import { createNodeFileSystem } from './node-fs.ts'
 
 const VERSION: string = pkg.version
+const fileSystem = createNodeFileSystem()
 
 const USAGE = `loom — a git-native, concurrent, provider-agnostic multi-agent engine
 
@@ -25,23 +25,13 @@ Commands:
   blueprint validate <file>   Validate a Blueprint and every tool manifest it names.
 `
 
-function readTextFile(filePath: string): ReadTextFileResult {
-	if (!existsSync(filePath)) return { kind: 'unreadable', message: 'file does not exist' }
-	try {
-		return { kind: 'ok', text: readFileSync(filePath, 'utf8') }
-	} catch (error) {
-		// Existence was checked above, so this is a genuine I/O fault.
-		return { kind: 'unreadable', message: describeError(error) }
-	}
-}
-
 function validateBlueprintCommand(filePath: string | undefined): number {
 	if (filePath === undefined) {
 		process.stderr.write('loom blueprint validate: missing <file>\n')
 		return 2
 	}
 	try {
-		const blueprint = loadBlueprint({ readTextFile }, filePath)
+		const blueprint = loadBlueprint({ readTextFile: fileSystem.readTextFile }, filePath)
 		const roles = Object.keys(blueprint.roles).length
 		process.stdout.write(
 			`${filePath}: ok — entry role "${blueprint.entryRole}", ${roles} role(s), ${blueprint.tools.length} tool(s)\n`,

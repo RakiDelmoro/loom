@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { ValidationError } from '../errors.ts'
 import { loadBlueprint } from './load.ts'
-import type { ReadTextFileResult } from './types.ts'
+import type { ReadTextFileResult } from '../fs.ts'
 
 /** An in-memory filesystem keyed by absolute path. */
 function memoryFiles(files: Readonly<Record<string, string>>) {

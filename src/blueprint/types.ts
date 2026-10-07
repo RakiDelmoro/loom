@@ -92,10 +92,3 @@ export interface LoadedBlueprint {
 	readonly permissions: Permissions
 }
 
-/**
- * The result of reading a file. Leaves report what happened as a value rather
- * than throwing, so the caller decides how a missing file is handled.
- */
-export type ReadTextFileResult =
-	| { readonly kind: 'ok'; readonly text: string }
-	| { readonly kind: 'unreadable'; readonly message: string }

@@ -50,6 +50,15 @@ depend on external services. Every test runs in milliseconds, so running the
 whole suite is never a burden. Fakes go in for the model, the filesystem, and
 subprocess leaves.
 
+### Two lanes
+
+When the subject *is* an external system — real git, a real subprocess — its
+behaviour cannot be verified in memory. Those checks live in an opt-in
+integration lane guarded by an environment variable and run by their own script
+(`bun run test:git`), so the fast suite stays clean. The integration lane proves
+the property; the fast lane proves the logic around it. A change to
+`src/workspace/` is not trusted until both pass.
+
 ### Testable business logic
 
 Structure code so that parsing, validation, formatting, transformation, and
@@ -217,9 +226,13 @@ loom/
 └── src/
     ├── cli.ts         the `loom` command (glue)
     ├── errors.ts      ValidationError, describeError
+    ├── fs.ts          the filesystem boundary (types only)
+    ├── node-fs.ts     the real filesystem leaf
     ├── guards.ts      the canonical isRecord guard
     ├── blueprint/     types, parsers, loader
-    └── model/         provider interface, fake, openai client, router
+    ├── model/         provider interface, fake, openai client, router
+    ├── workspace/     naming, git exclude, the git leaf, the worktree manager
+    └── test-support/  shared test doubles (support code, not tests)
 ```
 
 Tests are colocated: `foo.ts` is covered by `foo.test.ts`.

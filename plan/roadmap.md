@@ -19,10 +19,10 @@ Milestones are sequential: the isolation primitive must exist before the engine 
 
 **Acceptance criteria.**
 
-- [ ] `bun test` green; `bun run typecheck` clean.
-- [ ] `loom blueprint validate` accepts the example Blueprint and rejects a malformed one with a path-based error.
-- [ ] The router maps every role in the example Blueprint to a profile, with a unit test.
-- [ ] The `openai-compatible` client is tested against a fake `fetch` (no network).
+- [x] `bun test` green; `bun run typecheck` clean.
+- [x] `loom blueprint validate` accepts the example Blueprint and rejects a malformed one with a path-based error.
+- [x] The router maps every role in the example Blueprint to a profile, with a unit test.
+- [x] The `openai-compatible` client is tested against a fake `fetch` (no network).
 
 ---
 
@@ -33,15 +33,16 @@ Milestones are sequential: the isolation primitive must exist before the engine 
 **Deliverables.**
 
 1. **Git leaf.** A factory over `git` subprocess calls (worktree add/remove/list, commit, branch, diff, rev-parse).
-2. **Worktree orchestration.** `create(runId, agentId, baseRef)`, `remove`, `list`, `commit`, `branchFor`, `pathFor`; deterministic naming; `.loom/` git-excluded following worktree `gitdir` links.
-3. **Cleanup on every exit path** — success, error, and interruption.
+2. **Worktree orchestration.** `create(runId, agentId, baseSha)`, `commit`, `remove`, `removeRun`, `resolveBaseSha`, `list`; naming derived from the run and agent ids; `.loom/` git-excluded, following worktree `gitdir` links.
+3. **Idempotent cleanup** — `remove` and `removeRun` are safe to run twice and leave no registered worktrees or stray directories. (Wiring cleanup to *every run exit path* needs a run loop, so that lands in M2/M3.)
+4. **Two test lanes** — the fast suite proves the manager's logic against a fake git; an opt-in integration lane (`bun run test:git`) proves isolation against real git, which no fake can.
 
 **Acceptance criteria.**
 
-- [ ] An integration test creates 3 worktrees from a temp repo, writes distinct files, and commits to 3 branches.
-- [ ] Isolation is proven: a file written in worktree A is absent in worktree B and in the base.
-- [ ] Cleanup leaves no registered worktrees and no stray directories.
-- [ ] `.loom/` never appears in `git status`.
+- [x] An integration test creates 3 worktrees from a temp repo, writes distinct files, and commits to 3 branches.
+- [x] Isolation is proven: a file written in worktree A is absent in worktree B and in the base.
+- [x] Cleanup leaves no registered worktrees and no stray directories.
+- [x] `.loom/` never appears in `git status`.
 
 ---
 

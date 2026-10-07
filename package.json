@@ -10,7 +10,8 @@
 	"scripts": {
 		"loom": "bun src/cli.ts",
 		"typecheck": "bun --bun tsc --noEmit",
-		"test": "bun test src/"
+		"test": "bun test src/",
+		"test:git": "LOOM_GIT_TESTS=1 bun test src/workspace/git.integration.test.ts"
 	},
 	"devDependencies": {
 		"@types/bun": "^1.2.0",

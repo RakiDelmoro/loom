@@ -18,7 +18,8 @@ bun install
 
 ```bash
 bun run typecheck       # tsc --noEmit; must be clean
-bun test                # the whole suite; in-memory, milliseconds
+bun test                # the fast suite; in-memory, milliseconds
+bun run test:git        # the opt-in lane that runs real git against a temp repo
 bun run loom --help     # run the CLI from source
 ```
 
@@ -62,13 +63,21 @@ function in the right tier before writing it.
 
 ## Tests
 
-Tests are colocated with the code they cover (`foo.ts` → `foo.test.ts`) and run
-under `bun test`. They must be in-memory: no network, no filesystem, no
-subprocess. Inject a fake at the leaf and exercise the real logic above it.
+Two lanes.
 
-The filesystem is faked by passing a `readTextFile` function; the model is faked
-by `createFakeProvider`. Neither the real filesystem nor a real endpoint is ever
-touched in a test.
+**`bun test` — the fast lane.** Tests are colocated with the code they cover
+(`foo.ts` → `foo.test.ts`). They must be in-memory: no network, no filesystem, no
+subprocess. Inject a fake at the leaf and exercise the real logic above it. The
+filesystem is faked with `createMemoryFileSystem`, the model with
+`createFakeProvider`, and git with a scripted `GitRunner` that records every
+command it is asked to run.
+
+**`bun run test:git` — the integration lane.** Some properties belong to real
+git and cannot be proven against a fake. That one agent's files are invisible to
+another is the entire point of the worktree manager, and only real git can
+demonstrate it. This lane runs against a throwaway repository in the temp
+directory, and every test in it is skipped unless `LOOM_GIT_TESTS=1` — which the
+script sets. Run it before trusting any change to `src/workspace/`.
 
 ## Commits
 

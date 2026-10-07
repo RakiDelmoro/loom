@@ -10,7 +10,8 @@
 import * as path from 'node:path'
 import { ValidationError } from '../errors.ts'
 import { parseBlueprintFile, parseToolManifest, validateBlueprint } from './parse.ts'
-import type { LoadedBlueprint, LoadedRole, ReadTextFileResult, RoleDefinition } from './types.ts'
+import type { ReadTextFileResult } from '../fs.ts'
+import type { LoadedBlueprint, LoadedRole, RoleDefinition } from './types.ts'
 
 export interface BlueprintLoaderDependencies {
 	readonly readTextFile: (filePath: string) => ReadTextFileResult
