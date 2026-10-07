@@ -1,0 +1,13 @@
+{
+	"name": "run_shell",
+	"description": "Run a shell command with the workspace as its working directory.",
+	"parameters": {
+		"type": "object",
+		"properties": {
+			"command": { "type": "string", "description": "The command line, run via `sh -c`." },
+			"timeoutSeconds": { "type": "number", "description": "Optional timeout; never above the run's configured maximum." }
+		},
+		"required": ["command"],
+		"additionalProperties": false
+	}
+}

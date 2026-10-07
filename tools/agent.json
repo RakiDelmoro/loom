@@ -1,0 +1,13 @@
+{
+	"name": "agent",
+	"description": "Delegate a task to another role. The child runs to completion and returns its result card.",
+	"parameters": {
+		"type": "object",
+		"properties": {
+			"role": { "type": "string", "description": "The role to delegate to." },
+			"task": { "type": "string", "description": "A self-contained task for the child; it cannot see this conversation." }
+		},
+		"required": ["role", "task"],
+		"additionalProperties": false
+	}
+}

@@ -1,0 +1,11 @@
+{
+	"name": "list_dir",
+	"description": "List the entries of a directory in the workspace.",
+	"parameters": {
+		"type": "object",
+		"properties": {
+			"path": { "type": "string", "description": "Directory path relative to the workspace root; defaults to the root." }
+		},
+		"additionalProperties": false
+	}
+}

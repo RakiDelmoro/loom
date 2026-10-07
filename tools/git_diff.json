@@ -1,0 +1,12 @@
+{
+	"name": "git_diff",
+	"description": "Show the diff of the workspace against a base ref.",
+	"parameters": {
+		"type": "object",
+		"properties": {
+			"base": { "type": "string", "description": "The ref to diff against; defaults to HEAD." },
+			"path": { "type": "string", "description": "Optional path to limit the diff to." }
+		},
+		"additionalProperties": false
+	}
+}

@@ -1,0 +1,13 @@
+{
+	"name": "finish",
+	"description": "End this role and return a result card to the caller.",
+	"parameters": {
+		"type": "object",
+		"properties": {
+			"status": { "type": "string", "enum": ["success", "error", "needs_clarification"] },
+			"summary": { "type": "string", "description": "A short, plain-language explanation of the result." }
+		},
+		"required": ["status", "summary"],
+		"additionalProperties": false
+	}
+}

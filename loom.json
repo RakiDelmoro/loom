@@ -1,0 +1,67 @@
+{
+	"entryRole": "orchestrator",
+
+	"roles": {
+		"orchestrator": {
+			"prompt": "prompts/orchestrator.md",
+			"model": "reasoner",
+			"tools": ["agent", "finish"],
+			"parallel": { "maxChildren": 3 },
+			"label": { "detailed": "Orchestrator", "friendly": "Orchestrator", "whimsical": "Conductor" }
+		},
+		"planner": {
+			"prompt": "prompts/planner.md",
+			"model": "reasoner",
+			"tools": ["read_file", "list_dir", "finish"],
+			"isolation": "shared",
+			"label": { "detailed": "Planner", "friendly": "Planner", "whimsical": "Strategist" }
+		},
+		"coder": {
+			"prompt": "prompts/coder.md",
+			"model": "worker",
+			"tools": ["read_file", "write_file", "list_dir", "run_shell", "git_diff", "finish"],
+			"label": { "detailed": "Coder", "friendly": "Coder", "whimsical": "Builder" }
+		},
+		"reviewer": {
+			"prompt": "prompts/reviewer.md",
+			"model": "reasoner",
+			"tools": ["read_file", "list_dir", "git_diff", "finish"],
+			"isolation": "shared",
+			"label": { "detailed": "Reviewer", "friendly": "Reviewer", "whimsical": "Inspector" }
+		},
+		"recovery": {
+			"prompt": "prompts/recovery.md",
+			"model": "reasoner",
+			"tools": ["agent", "finish"],
+			"label": { "detailed": "Recovery", "friendly": "Recovery", "whimsical": "Fixer" }
+		}
+	},
+
+	"tools": [
+		"tools/agent.json",
+		"tools/finish.json",
+		"tools/read_file.json",
+		"tools/write_file.json",
+		"tools/list_dir.json",
+		"tools/run_shell.json",
+		"tools/git_diff.json"
+	],
+
+	"routing": {
+		"reasoner": { "provider": "anthropic", "model": "claude-sonnet-4", "temperature": 0.2 },
+		"worker": { "provider": "local", "model": "qwen3-coder-30b", "temperature": 0.1 }
+	},
+
+	"budgets": {
+		"maxAgentDepth": 6,
+		"maxConcurrentAgents": 8,
+		"maxCostUsd": 5,
+		"maxTokensPerRun": 2000000,
+		"toolTimeoutSeconds": 60
+	},
+
+	"permissions": {
+		"mode": "workspace-write",
+		"requireApproval": []
+	}
+}

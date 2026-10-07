@@ -1,0 +1,13 @@
+{
+	"name": "write_file",
+	"description": "Write or overwrite a file in the workspace.",
+	"parameters": {
+		"type": "object",
+		"properties": {
+			"path": { "type": "string", "description": "Path relative to the workspace root." },
+			"content": { "type": "string", "description": "The complete new file contents." }
+		},
+		"required": ["path", "content"],
+		"additionalProperties": false
+	}
+}
