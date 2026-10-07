@@ -17,7 +17,8 @@ import { loadDeployment } from './deployment/load.ts'
 import type { FetchLike } from './model/openai.ts'
 import { createNodeFileSystem } from './node-fs.ts'
 import type { OpResult } from './result.ts'
-import { runTask } from './run-task.ts'
+import { runTask, generateRunId } from './run-task.ts'
+import { createRunControl } from './runs/control.ts'
 import { createRunCommand } from './tools/run-command.ts'
 import { createGitRunner } from './workspace/git.ts'
 
@@ -58,6 +59,8 @@ export async function runBench(options: RunBenchOptions): Promise<SuiteResult> {
 				// `auto` autonomy, so the agents' branches are merged and the
 				// validation sees the system's real output — merge included.
 				const outcome = await runTask({
+					runId: generateRunId(new Date()),
+					control: createRunControl(),
 					repoPath: request.workspace,
 					blueprintPath: request.blueprintPath,
 					deploymentPath: request.deploymentPath,

@@ -48,7 +48,25 @@ export type RunEvent =
 			readonly usage: Usage
 			readonly costUsd: number
 	  }
+	| {
+			/**
+			 * One completed model call. The per-turn record: `agent_finish` carries the
+			 * agent's totals, but only this says which turn cost what, and how long it took.
+			 */
+			readonly type: 'model_call'
+			readonly agentId: string
+			readonly model: string
+			readonly usage: Usage
+			readonly messageCount: number
+			readonly durationMs: number
+	  }
 	| { readonly type: 'error'; readonly agentId: string; readonly kind: string; readonly message: string }
+	| {
+			/** A message the operator injected into a running role's conversation. */
+			readonly type: 'operator_notice'
+			readonly agentId: string
+			readonly message: string
+	  }
 	| {
 			readonly type: 'alert'
 			readonly kind: 'cost' | 'tokens'

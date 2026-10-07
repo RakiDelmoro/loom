@@ -15,6 +15,7 @@
 import type { RoutingProfile } from '../blueprint/types.ts'
 import { isRecord } from '../guards.ts'
 import type { Message, Provider, ToolCall, ToolSpec, Usage } from '../model/types.ts'
+import type { RunControl } from '../runs/control.ts'
 import type { RunEventSink } from '../runs/events.ts'
 import type { ToolPolicy } from '../tools/policy.ts'
 import type { ToolRegistry } from '../tools/types.ts'
@@ -43,6 +44,8 @@ export interface AgentLoopDependencies {
 	readonly tools: ToolRegistry
 	/** What the run permits, independent of what the role was granted. */
 	readonly policy: ToolPolicy
+	/** The operator's channel into a running role. */
+	readonly control: RunControl
 	/** Hands a sub-task to another role and resolves with that role's card. */
 	readonly delegate: (request: DelegationRequest) => Promise<ResultCard>
 	readonly events: RunEventSink
@@ -86,6 +89,14 @@ export async function runAgentLoop(
 	while (turns < request.maxTurns) {
 		turns += 1
 
+		// The safe point. A held run waits here, and anything the operator sent
+		// arrives as a user message the model actually sees.
+		for (const notice of await dependencies.control.drain()) {
+			messages.push({ role: 'user', content: `[Operator notice] ${notice}` })
+			dependencies.events({ type: 'operator_notice', agentId: request.agentId, message: notice })
+		}
+
+		const callStartedAt = dependencies.now()
 		const result = await dependencies.provider.chat({
 			model: request.profile.model,
 			messages,
@@ -93,6 +104,7 @@ export async function runAgentLoop(
 			temperature: request.profile.temperature,
 			maxTokens: request.profile.maxTokens ?? DEFAULT_MAX_TOKENS,
 		})
+		const callFinishedAt = dependencies.now()
 
 		if (result.kind !== 'success') {
 			return settle(
@@ -111,6 +123,15 @@ export async function runAgentLoop(
 		usage.inputTokens += result.response.usage.inputTokens
 		usage.cachedInputTokens += result.response.usage.cachedInputTokens
 		usage.outputTokens += result.response.usage.outputTokens
+
+		dependencies.events({
+			type: 'model_call',
+			agentId: request.agentId,
+			model: request.profile.model,
+			usage: result.response.usage,
+			messageCount: messages.length,
+			durationMs: callFinishedAt - callStartedAt,
+		})
 
 		const toolCalls = result.response.toolCalls
 		messages.push({

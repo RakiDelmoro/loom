@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import { existsSync, rmSync } from 'node:fs'
 import * as path from 'node:path'
 import { createFakeProvider } from '../model/fake.ts'
+import { createRunControl } from '../runs/control.ts'
 import { createNodeFileSystem } from '../node-fs.ts'
 import { createTestBlueprint } from '../test-support/blueprint.ts'
 import { createCounterClock } from '../test-support/clock.ts'
@@ -73,6 +74,7 @@ suite('the scheduler against real git', () => {
 				blueprint,
 				now: createCounterClock(),
 				events: () => {},
+				control: createRunControl(),
 			},
 			{ repoPath: repo, prices: {}, modelOverrides: {}, approvals: [] },
 		)

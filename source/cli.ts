@@ -14,8 +14,11 @@ import { parseArguments, parseModelOverrides, type ParsedArguments } from './cli
 import { ValidationError } from './errors.ts'
 import { createNodeFileSystem } from './node-fs.ts'
 import { noRedaction } from './redact.ts'
-import { runTask } from './run-task.ts'
+import { runTask, generateRunId } from './run-task.ts'
+import { createRunControl } from './runs/control.ts'
+import { diffRun, mergeAgent, undoRun } from './runs/lifecycle.ts'
 import { runBench } from './run-bench.ts'
+import { serve } from './serve.ts'
 import type { Split, SuiteResult } from './bench/types.ts'
 import { runTunerCommand } from './run-tuner.ts'
 import type { TunerReport } from './tuner/types.ts'
@@ -46,6 +49,7 @@ Usage:
   loom clean  <runId> [--branches] [--repo <path>]
   loom bench --suite <dir> [--split <optimization|held-out>] [--repetitions <n>]
   loom tune [--repo <path>] [--config <file>]
+  loom serve [--repo <path>] [--port <n>] [--host <addr>]
 
 Commands:
   blueprint validate   Validate a Blueprint and every tool manifest it names.
@@ -58,6 +62,7 @@ Commands:
   clean                Remove a run's worktrees, and its branches with --branches.
   bench                Score a Blueprint against a benchmark suite.
   tune                 Improve the Blueprint against the bench, and promote what wins.
+  serve                Serve the HTTP API and the browser UI for a repository.
 
 Files:
   loom.json            The Blueprint: roles, tools, routing, budgets, alerts.
@@ -155,6 +160,8 @@ async function runCommand(args: ParsedArguments): Promise<number> {
 	if (overrides.kind !== 'ok') return fail(`loom run: ${overrides.message}`)
 
 	const outcome = await runTask({
+		runId: generateRunId(new Date()),
+		control: createRunControl(),
 		repoPath,
 		blueprintPath: resolveFileFlag(args.flags['blueprint'], repoPath, 'loom.json'),
 		deploymentPath: resolveFileFlag(args.flags['deployment'], repoPath, 'loom.deployment.json'),
@@ -212,22 +219,11 @@ function diffCommand(args: ParsedArguments): number {
 	if (runId === undefined) return fail('loom diff: missing <runId>')
 
 	const { store, lifecycle } = openRepository(resolveRepoPath(args))
-	const manifest = store.readManifest(runId)
-	if (manifest === null) return fail(`loom diff: no run "${runId}"`)
-
 	const only = args.flags['agent']
-	const committed = manifest.agents.filter((agent) => agent.branch !== null && agent.sha !== null)
-	const selected = only === undefined || only === '' ? committed : committed.filter((agent) => agent.agentId === only)
-	if (selected.length === 0) return fail(`loom diff: no agent with a commit${only === undefined ? '' : ` named "${only}"`}`)
+	const diff = diffRun(store, lifecycle, runId, only === undefined || only === '' ? null : only)
+	if (diff.kind !== 'ok') return fail(`loom diff: ${diff.message}`)
 
-	let output = ''
-	for (const agent of selected) {
-		const diff = lifecycle.diffBetween(manifest.baseSha, agent.branch ?? '')
-		if (diff.kind !== 'ok') return fail(`loom diff: ${diff.message}`)
-		if (only === undefined || only === '') output += `--- ${agent.agentId} (${agent.branch ?? ''}) ---\n`
-		output += diff.value
-	}
-	process.stdout.write(output)
+	process.stdout.write(diff.value)
 	return 0
 }
 
@@ -238,17 +234,10 @@ function mergeCommand(args: ParsedArguments): number {
 	if (agentId === undefined || agentId === '') return fail('loom merge: --agent is required')
 
 	const { store, lifecycle } = openRepository(resolveRepoPath(args))
-	const manifest = store.readManifest(runId)
-	if (manifest === null) return fail(`loom merge: no run "${runId}"`)
-
-	const agent = manifest.agents.find((entry) => entry.agentId === agentId)
-	if (agent === undefined) return fail(`loom merge: no agent "${agentId}" in ${runId}`)
-	if (agent.branch === null || agent.sha === null) return fail(`loom merge: ${agentId} produced no commit`)
-
-	const merged = lifecycle.mergeBranch(agent.branch)
+	const merged = mergeAgent(store, lifecycle, runId, agentId)
 	if (merged.kind !== 'ok') return fail(`loom merge: ${merged.message}`)
 
-	process.stdout.write(`merged ${agent.branch} -> ${merged.value}\n`)
+	process.stdout.write(`merged -> ${merged.value}\n`)
 	return 0
 }
 
@@ -257,13 +246,10 @@ function undoCommand(args: ParsedArguments): number {
 	if (runId === undefined) return fail('loom undo: missing <runId>')
 
 	const { store, lifecycle } = openRepository(resolveRepoPath(args))
-	const manifest = store.readManifest(runId)
-	if (manifest === null) return fail(`loom undo: no run "${runId}"`)
-
-	const undone = lifecycle.undo(manifest.baseSha)
+	const undone = undoRun(store, lifecycle, runId)
 	if (undone.kind !== 'ok') return fail(`loom undo: ${undone.message}`)
 
-	process.stdout.write(`base restored to ${manifest.baseSha}\n`)
+	process.stdout.write(`base restored to ${undone.value}\n`)
 	return 0
 }
 
@@ -382,6 +368,45 @@ async function tuneCommand(args: ParsedArguments): Promise<number> {
 	return 0
 }
 
+async function serveCommand(args: ParsedArguments): Promise<number> {
+	const repoPath = resolveRepoPath(args)
+	const rawPort = args.flags['port'] ?? '8787'
+	const port = Number.parseInt(rawPort, 10)
+	if (!Number.isInteger(port) || port <= 0 || port > 65535) return fail('loom serve: --port must be a port number')
+
+	const hostname = args.flags['host'] ?? '127.0.0.1'
+	// A token is required unless the operator explicitly turns it off, and turning
+	// it off is only safe on a loopback bind — so the flag has to be deliberate.
+	const token = process.env['LOOM_TOKEN'] ?? null
+
+	const handle = await serve({
+		repoPath,
+		blueprintPath: resolveFileFlag(args.flags['blueprint'], repoPath, 'loom.json'),
+		deploymentPath: resolveFileFlag(args.flags['deployment'], repoPath, 'loom.deployment.json'),
+		hostname,
+		port,
+		token,
+		autonomy: parseAutonomy(args.flags['autonomy'] ?? 'auto') ?? 'auto',
+		fs: fileSystem,
+		env: process.env,
+		fetch: (url, init) => fetch(url, init),
+		write: (message) => process.stdout.write(message),
+	})
+
+	// Serve until the process is told to stop; the handle stays referenced so the
+	// server is never garbage-collected out from under a live connection.
+	await new Promise<void>((resolve) => {
+		const shutdown = (): void => {
+			void handle.stop().then(() => {
+				resolve()
+			})
+		}
+		process.on('SIGINT', shutdown)
+		process.on('SIGTERM', shutdown)
+	})
+	return 0
+}
+
 async function main(argv: readonly string[]): Promise<number> {
 	const command = argv[0]
 
@@ -418,6 +443,8 @@ async function main(argv: readonly string[]): Promise<number> {
 			return benchCommand(args)
 		case 'tune':
 			return tuneCommand(args)
+		case 'serve':
+			return serveCommand(args)
 		default:
 			process.stderr.write(`loom: unknown command "${command}"\n\n${USAGE}`)
 			return 2

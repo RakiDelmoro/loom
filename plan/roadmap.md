@@ -173,13 +173,23 @@ Milestones are sequential: the isolation primitive must exist before the engine 
 
 **Goal.** Human control and visibility. See [surfaces.md](surfaces.md).
 
-**Deliverables.** HTTP API + web UI (run list, live run view, **diff review**, cost/latency/trace dashboard); run search/filter; authentication; OpenTelemetry tracing.
+**Deliverables.**
+
+1. **HTTP API** — `loom serve`, every endpoint a pure function of the request and the run service, so the surface is testable without a socket.
+2. **Authorization** — a bearer token on every `/api/` call.
+3. **Web UI** — one page, no build step: run list, live run view, diff review, per-agent cost, and the trace.
+4. **An operator control channel** — steer, pause, and resume a run that is already going, at its next turn boundary. (This is M7's deferred criterion; it needed this milestone's channel to exist.)
+5. **Tracing** — agent → turn → tool spans with per-span cost, derived from the event log and served as OTel-shaped JSON.
 
 **Acceptance criteria.**
 
-- [ ] A run is startable, watchable, reviewable (diff), and revertible from the UI.
-- [ ] Traces expose agent → turn → tool spans with per-span cost.
-- [ ] The UI works without a JavaScript build step, or with exactly one documented build step.
+- [x] A run is startable, watchable, reviewable (diff), and revertible from the UI.
+- [x] Traces expose agent → turn → tool spans with per-span cost.
+- [x] The UI works with no JavaScript build step.
+- [x] An operator can pause a run, change what it is doing, and resume. — the message reaches the model, not only the log.
+- [ ] Run search and filter — backlog.
+- [ ] A WebSocket push channel — backlog; the UI polls.
+- [ ] Exporting spans through the OpenTelemetry SDK — backlog; it is a dependency the project does not carry. The span data is built.
 
 ---
 
@@ -196,6 +206,9 @@ When you add a row, also update the target milestone's deliverables to describe 
 Unbuilt features. None is scheduled; each needs a fresh scoping before work begins.
 
 - **MCP client.** Let external MCP servers contribute tools without forking the engine. Highest-value ecosystem item.
+- **Surface completeness.** `/api/runs/:id/cancel`, `GET|PUT /api/blueprint`, `/api/config`, run search and filter, and a WebSocket push channel in place of polling.
+- **OpenTelemetry export.** The spans exist; exporting them through the SDK needs a dependency, which is a decision rather than a task.
+- **CLI completeness.** `--json`, `--dry-run`, `--effort`, `--base`, and `loom worktrees`.
 - **Project memory and retrieval.** Per-repo conventions, architecture map, and failure post-mortems, retrieved into context. Runs are amnesiac today.
 - **Best-of-N and speculative execution.** First-class strategies on top of the pool.
 - **Model-assisted merge conflict resolution.** Builds on M3's explicit merge.

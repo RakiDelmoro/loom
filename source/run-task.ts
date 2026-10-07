@@ -19,6 +19,7 @@ import type { Deployment } from './deployment/types.ts'
 import type { FetchLike } from './model/openai.ts'
 import { validateOverrides } from './model/router.ts'
 import { createNodeFileSystem } from './node-fs.ts'
+import type { RunControl } from './runs/control.ts'
 import type { RunEventSink } from './runs/events.ts'
 import { createRunLifecycle } from './runs/lifecycle.ts'
 import { createRunRecorder } from './runs/recorder.ts'
@@ -36,6 +37,10 @@ import { createGitRunner } from './workspace/git.ts'
 import { createWorktreeManager } from './workspace/worktree.ts'
 
 export interface RunTaskOptions {
+	/** Chosen by the caller, so a service can name the run before it starts. */
+	readonly runId: string
+	/** The operator's channel into this run. */
+	readonly control: RunControl
 	readonly repoPath: string
 	readonly blueprintPath: string
 	readonly deploymentPath: string
@@ -116,7 +121,7 @@ export async function runTask(options: RunTaskOptions): Promise<RunOutcome> {
 	const base = worktrees.resolveBaseSha('HEAD')
 	if (base.kind !== 'ok') throw new Error(base.message)
 
-	const runId = generateRunId(new Date())
+	const runId = options.runId
 	const redact = createRedactor(collectSecrets(deployment, options.env))
 	const store = createRunStore({ fs, now: () => Date.now(), redact }, { repoPath: options.repoPath })
 	const recorder = createRunRecorder(
@@ -147,7 +152,7 @@ export async function runTask(options: RunTaskOptions): Promise<RunOutcome> {
 	}
 
 	const scheduler = createScheduler(
-		{ providers, tools, worktrees, blueprint, now: () => Date.now(), events },
+		{ providers, tools, worktrees, blueprint, now: () => Date.now(), events, control: options.control },
 		{ repoPath: options.repoPath, prices: deployment.prices, modelOverrides: options.modelOverrides, approvals: options.approvals },
 	)
 

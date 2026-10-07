@@ -67,7 +67,15 @@ This is not theoretical. A workspace file can contain a credential, a tool resul
 
 The event stream records every tool call, its arguments, its **full un-truncated result**, and which agent made it, plus every permission denial. A human can reconstruct exactly what ran, what it returned, and what was refused, from `.loom/runs/<id>/events.jsonl` alone.
 
-### 3.8 Inspection tools are read-only and bounded
+### 3.8 The HTTP surface
+
+`loom serve` exposes the operator API. Every `/api/` call carries a bearer token from `LOOM_TOKEN`; without it the check is disabled, which is safe only on a loopback bind. The default bind is `127.0.0.1` for exactly that reason.
+
+Static assets are served without a token — a browser cannot present a credential before it has loaded the page, and the page is not the secret. The **data** is.
+
+The API can start, steer, pause, merge, and undo a run. It therefore has the same authority as the CLI on the machine it runs on, and the token is the whole of the boundary. Do not bind it to a public interface without one.
+
+### 3.9 Inspection tools are read-only and bounded
 
 Overseer roles get windowed, capped, read-only access to another agent's conversation — never full messages. A compromised overseer cannot flood its own context with a target's 256k-token history, and has no write path into another agent's history.
 

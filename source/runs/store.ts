@@ -18,7 +18,7 @@ import type { FileSystem } from '../fs.ts'
 import { logLine, type RunEvent } from './events.ts'
 import type { Redact } from '../redact.ts'
 import type { RunManifest } from './types.ts'
-import { parseRunManifest } from './validate.ts'
+import { parseRunLogLine, parseRunManifest, type RunLogRecord } from './validate.ts'
 
 const RUNS_DIRECTORY = '.loom/runs'
 const MANIFEST_FILE = 'run.json'
@@ -41,6 +41,7 @@ export interface RunStore {
 	readManifest(runId: string): RunManifest | null
 	appendEvent(runId: string, event: RunEvent): void
 	listRunIds(): readonly string[]
+	readEvents(runId: string): readonly RunLogRecord[]
 }
 
 export function createRunStore(dependencies: RunStoreDependencies, options: { readonly repoPath: string }): RunStore {
@@ -89,6 +90,27 @@ export function createRunStore(dependencies: RunStoreDependencies, options: { re
 				.filter((entry) => entry.isDirectory)
 				.map((entry) => entry.name)
 				.sort()
+		},
+
+		readEvents(runId: string): readonly RunLogRecord[] {
+			const read = fs.readTextFile(path.join(runDirectory(runId), EVENTS_FILE))
+			if (read.kind !== 'ok') return []
+
+			const records: RunLogRecord[] = []
+			for (const line of read.text.split('\n')) {
+				if (line.trim() === '') continue
+				let parsed: unknown
+				try {
+					parsed = JSON.parse(line)
+				} catch {
+					// A torn or hand-edited line is skipped rather than failing the read:
+					// the rest of the log is still worth showing.
+					continue
+				}
+				const record = parseRunLogLine(parsed, records.length)
+				if (record !== null) records.push(record)
+			}
+			return records
 		},
 	}
 }

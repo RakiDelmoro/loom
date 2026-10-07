@@ -26,6 +26,7 @@ function createFakeStore(): FakeStore {
 			events.push(event)
 		},
 		listRunIds: () => [],
+		readEvents: () => [],
 	}
 }
 

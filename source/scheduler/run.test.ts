@@ -7,6 +7,7 @@ import { createTestBlueprint } from '../test-support/blueprint.ts'
 import { createBarrier, createCounterClock, delay } from '../test-support/clock.ts'
 import { call, textResponse, toolCallResponse } from '../test-support/model.ts'
 import { createFakeRegistry } from '../test-support/providers.ts'
+import { createRunControl } from '../runs/control.ts'
 import { createFakeWorktrees, type FakeWorktrees } from '../test-support/worktrees.ts'
 import { createToolRegistry } from '../tools/registry.ts'
 import type { ToolRegistry } from '../tools/types.ts'
@@ -37,6 +38,7 @@ function createRun(options: {
 			blueprint: options.blueprint,
 			now: options.now ?? createCounterClock(),
 			events: (event) => events.push(event),
+			control: createRunControl(),
 		},
 		{
 			repoPath: '/repo',
@@ -73,7 +75,7 @@ describe('createScheduler', () => {
 		expect(result.agents).toHaveLength(1)
 		expect(result.agents[0]?.role).toBe('orchestrator')
 		expect(result.agents[0]?.depth).toBe(0)
-		expect(harness.events.map((event) => event.type)).toEqual(['agent_start', 'agent_finish'])
+		expect(harness.events.map((event) => event.type)).toEqual(['agent_start', 'model_call', 'agent_finish'])
 	})
 
 	test('runs sibling agents concurrently', async () => {

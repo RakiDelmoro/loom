@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Loom</title>
+		<link rel="stylesheet" href="/styles.css" />
+	</head>
+	<body>
+		<header>
+			<h1>Loom</h1>
+			<span id="active"></span>
+			<label class="token">
+				token
+				<input id="token" type="password" placeholder="only if the server requires one" />
+			</label>
+		</header>
+
+		<main>
+			<section class="panel runs">
+				<h2>Runs</h2>
+				<ul id="run-list"></ul>
+			</section>
+
+			<section class="panel detail">
+				<h2 id="detail-title">No run selected</h2>
+				<div id="run-meta"></div>
+				<div id="controls"></div>
+				<div id="agents"></div>
+				<h3>Events</h3>
+				<pre id="events"></pre>
+				<h3>Trace</h3>
+				<div id="trace"></div>
+				<h3>Diff</h3>
+				<pre id="diff"></pre>
+			</section>
+		</main>
+
+		<form id="submit">
+			<input id="task" placeholder="Describe a task…" autocomplete="off" />
+			<button>Start run</button>
+		</form>
+
+		<p id="error"></p>
+		<script type="module" src="/app.js"></script>
+	</body>
+</html>

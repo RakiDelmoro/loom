@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import { createFakeProvider } from '../model/fake.ts'
 import type { ChatRequest, Provider } from '../model/types.ts'
 import type { RunEvent } from '../runs/events.ts'
+import { createRunControl } from '../runs/control.ts'
 import { createCounterClock, delay } from '../test-support/clock.ts'
 import { call, textResponse, toolCallResponse } from '../test-support/model.ts'
 import { createToolRegistry } from '../tools/registry.ts'
@@ -27,6 +28,7 @@ function dependencies(provider: Provider, tools: ToolRegistry = createToolRegist
 		tools,
 		delegate: async () => ({ status: 'success', summary: 'child done' }),
 		policy: createToolPolicy({ mode: 'workspace-write', requireApproval: [], approvals: [] }),
+		control: createRunControl(),
 		events: () => {},
 		now: createCounterClock(),
 	}
@@ -157,6 +159,7 @@ describe('runAgentLoop', () => {
 				return { status: 'success', summary: 'child says hi' }
 			},
 			policy: createToolPolicy({ mode: 'workspace-write', requireApproval: [], approvals: [] }),
+			control: createRunControl(),
 			events: () => {},
 			now: createCounterClock(),
 		}
@@ -183,6 +186,7 @@ describe('runAgentLoop', () => {
 				return { status: 'success', summary: 'child' }
 			},
 			policy: createToolPolicy({ mode: 'workspace-write', requireApproval: [], approvals: [] }),
+			control: createRunControl(),
 			events: () => {},
 			now: createCounterClock(),
 		}
@@ -244,6 +248,7 @@ describe('runAgentLoop', () => {
 				provider,
 				tools,
 				policy: createToolPolicy({ mode: 'read-only', requireApproval: [], approvals: [] }),
+				control: createRunControl(),
 				delegate: async () => ({ status: 'success', summary: 'child' }),
 				events: (event) => events.push(event),
 				now: createCounterClock(),

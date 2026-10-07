@@ -232,6 +232,7 @@ loom/
     ├── run-task.ts    the composition root for one run
     ├── run-bench.ts   the composition root for a suite run
     ├── run-tuner.ts   the composition root for an optimization run
+    ├── serve.ts       the composition root for the HTTP API and UI
     ├── errors.ts      ValidationError, describeError
     ├── result.ts      OpResult — the outcome of a fallible operation
     ├── validation.ts  the shared validation vocabulary (expect*, rejectUnknownKeys)
@@ -247,6 +248,7 @@ loom/
     ├── model/         provider interface, fake, openai client, router
     ├── runs/          the manifest, the event log, the recorder, the lifecycle
     ├── scheduler/     the bounded pool and the agent-tree scheduler
+    ├── server/        the HTTP API (routes, service, auth, trace) and the static UI
     ├── tools/         tool types, the policy, the registry, and the built-in tools
     ├── tuner/         the optimizer: branches, the contract, verdicts, the loop, promotion
     ├── workspace/     naming, git exclude, the git leaf, the worktree manager

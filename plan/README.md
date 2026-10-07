@@ -2,7 +2,7 @@
 
 The design and work plan for **Loom** — a git-native, concurrent, provider-agnostic multi-agent engine with an evaluation-driven tuner.
 
-**Status: design only.** No code exists yet. These documents are written before the first line so the hard decisions are made deliberately rather than discovered.
+**Status: M0–M8 implemented.** The engine, the bench, the tuner, and the HTTP/UI surface are built and tested; the documents here are the design they were built against. Where a document and the code disagree, the code wins and the document is fixed in the same change.
 
 ## The four decisions
 

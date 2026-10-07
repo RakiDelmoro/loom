@@ -5,6 +5,7 @@ import { createNodeFileSystem } from '../node-fs.ts'
 import { isRecord } from '../guards.ts'
 import { noRedaction } from '../redact.ts'
 import { runTask, type RunTaskOptions } from '../run-task.ts'
+import { createRunControl } from './control.ts'
 import type { AutonomyLevel } from './types.ts'
 import { delay } from '../test-support/clock.ts'
 import { createTemporaryRepository, gitOutput } from '../test-support/git-repository.ts'
@@ -102,6 +103,8 @@ function createStubModel() {
 
 function runOptions(repo: string, task: string, autonomy: AutonomyLevel): RunTaskOptions {
 	return {
+		runId: `run-${Math.random().toString(36).slice(2, 10)}`,
+		control: createRunControl(),
 		repoPath: repo,
 		blueprintPath: path.join(repo, 'loom.json'),
 		deploymentPath: path.join(repo, 'loom.deployment.json'),

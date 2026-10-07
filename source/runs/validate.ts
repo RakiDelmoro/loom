@@ -11,6 +11,28 @@ import { isRecord } from '../guards.ts'
 import type { Usage } from '../model/types.ts'
 import type { AgentRecord, AutonomyLevel, ModelUsage, RunManifest, RunStatus } from './types.ts'
 
+/**
+ * One line of a run's event log.
+ *
+ * Only `at` and `type` are asserted — the rest is exposed as an untyped record
+ * because a log line is written by an earlier version of Loom as often as by this
+ * one. A reader checks the fields it uses rather than trusting a shape.
+ */
+export interface RunLogRecord {
+	readonly index: number
+	readonly at: string
+	readonly type: string
+	readonly event: Readonly<Record<string, unknown>>
+}
+
+export function parseRunLogLine(value: unknown, index: number): RunLogRecord | null {
+	if (!isRecord(value)) return null
+	const type = value['type']
+	const at = value['at']
+	if (typeof type !== 'string' || typeof at !== 'string') return null
+	return { index, at, type, event: value }
+}
+
 function isRunStatus(value: unknown): value is RunStatus {
 	return (
 		value === 'running' ||

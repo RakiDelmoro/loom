@@ -8,8 +8,70 @@
 
 import type { OpResult } from '../result.ts'
 import { failed, ok } from '../result.ts'
+import type { RunStore } from './store.ts'
 import type { GitRunner } from '../workspace/git.ts'
 import type { WorktreeManager } from '../workspace/worktree.ts'
+
+/**
+ * The three run operations a caller wants by name rather than by sha.
+ *
+ * The CLI and the HTTP API both need them, and both need the same refusals —
+ * an agent that produced no commit, a run that does not exist — so the checks
+ * live here once rather than being re-derived per transport.
+ */
+
+/** The diff of a run's committed agent branches. All of them, or the one named. */
+export function diffRun(
+	store: RunStore,
+	lifecycle: RunLifecycle,
+	runId: string,
+	agentId: string | null,
+): OpResult<string> {
+	const manifest = store.readManifest(runId)
+	if (manifest === null) return failed(`no run "${runId}"`)
+
+	const committed = manifest.agents.filter((agent) => agent.branch !== null && agent.sha !== null)
+	const selected = agentId === null ? committed : committed.filter((agent) => agent.agentId === agentId)
+	if (selected.length === 0) {
+		return failed(`no agent with a commit${agentId === null ? '' : ` named "${agentId}"`}`)
+	}
+
+	let output = ''
+	for (const agent of selected) {
+		const diff = lifecycle.diffBetween(manifest.baseSha, agent.branch ?? '')
+		if (diff.kind !== 'ok') return failed(diff.message)
+		if (agentId === null) output += `--- ${agent.agentId} (${agent.branch ?? ''}) ---\n`
+		output += diff.value
+	}
+	return ok(output)
+}
+
+/** Applies one agent's branch to the base branch. Returns the merge commit's sha. */
+export function mergeAgent(
+	store: RunStore,
+	lifecycle: RunLifecycle,
+	runId: string,
+	agentId: string,
+): OpResult<string> {
+	const manifest = store.readManifest(runId)
+	if (manifest === null) return failed(`no run "${runId}"`)
+
+	const agent = manifest.agents.find((entry) => entry.agentId === agentId)
+	if (agent === undefined) return failed(`no agent "${agentId}" in ${runId}`)
+	if (agent.branch === null || agent.sha === null) return failed(`${agentId} produced no commit`)
+
+	return lifecycle.mergeBranch(agent.branch)
+}
+
+/** Returns the base branch to the commit the run started from. */
+export function undoRun(store: RunStore, lifecycle: RunLifecycle, runId: string): OpResult<string> {
+	const manifest = store.readManifest(runId)
+	if (manifest === null) return failed(`no run "${runId}"`)
+
+	const undone = lifecycle.undo(manifest.baseSha)
+	if (undone.kind !== 'ok') return failed(undone.message)
+	return ok(manifest.baseSha)
+}
 
 export interface RunLifecycleDependencies {
 	readonly git: GitRunner

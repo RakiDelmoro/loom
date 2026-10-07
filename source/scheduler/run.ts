@@ -19,6 +19,7 @@ import type { ModelPrice } from '../deployment/types.ts'
 import type { ProviderRegistry } from '../deployment/registry.ts'
 import { routeRole } from '../model/router.ts'
 import type { ToolSpec } from '../model/types.ts'
+import type { RunControl } from '../runs/control.ts'
 import type { RunEventSink } from '../runs/events.ts'
 import { createToolPolicy } from '../tools/policy.ts'
 import type { ToolRegistry } from '../tools/types.ts'
@@ -35,6 +36,7 @@ export interface SchedulerDependencies {
 	readonly blueprint: LoadedBlueprint
 	readonly now: () => number
 	readonly events: RunEventSink
+	readonly control: RunControl
 }
 
 export interface SchedulerOptions {
@@ -179,6 +181,7 @@ export function createScheduler(
 				provider: createLimitedProvider(created.value, pool),
 				tools: dependencies.tools,
 				policy,
+				control: dependencies.control,
 				delegate: (request) => execute(state, request.role, request.task, agentId, depth + 1),
 				events: dependencies.events,
 				now: dependencies.now,
