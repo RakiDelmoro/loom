@@ -75,14 +75,22 @@ function renderProposalRequest(context: ProposalContext): string {
 			? 'Every benchmark passes. Propose changes that make the result cheaper or more robust without losing a pass.'
 			: `Benchmarks that are not fully passing:\n${context.failingBenchmarks.map((line) => `- ${line}`).join('\n')}`
 
-	const catalog =
+	// Each list stands on its own: a deployment may declare providers and price
+	// nothing, or price models and declare the provider elsewhere.
+	const menu = [
+		context.providers.length === 0
+			? null
+			: `Providers this deployment declares:\n${context.providers.map((name) => `- ${name}`).join('\n')}`,
 		context.pricedModels.length === 0
-			? ''
-			: `\n\nThe deployment declares these providers:\n${context.providers
-					.map((name) => `- ${name}`)
-					.join('\n')}\n\nand prices these models, which are the only ones a routing change may name:\n${context.pricedModels
+			? null
+			: `Models it prices, which are the only ones a routing change may name:\n${context.pricedModels
 					.map((line) => `- ${line}`)
-					.join('\n')}\n\nA routing profile is a provider and a model together, and the deployment is what knows which provider serves which model. Prefer a pair you have seen working in the Blueprint above.`
+					.join('\n')}`,
+	].filter((section) => section !== null)
+	const catalog =
+		menu.length === 0
+			? ''
+			: `\n\n${menu.join('\n\n')}\n\nA routing profile is a provider and a model together, and the deployment is what knows which provider serves which model. Prefer a pair you have seen working in the Blueprint above.`
 
 	const editable =
 		context.editableFiles.length === 0
