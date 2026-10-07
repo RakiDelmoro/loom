@@ -51,6 +51,8 @@ export interface TunerConfig {
 	readonly plateauLimit: number
 	/** How far the candidate's score must beat the baseline, beyond the interval. */
 	readonly improvementMargin: number
+	/** How much cheaper a candidate must be to win on cost alone, in [0, 1). */
+	readonly costMargin: number
 	readonly repetitions: number
 	readonly bigModel: { readonly provider: string; readonly model: string }
 }

@@ -25,6 +25,14 @@ import type { BlueprintChange, BranchOutcome, CycleReport, HeldOutGate, Hypothes
 export interface ProposalContext {
 	readonly blueprint: string
 	readonly failingBenchmarks: readonly string[]
+	/**
+	 * The models the deployment prices, with what each costs.
+	 *
+	 * A proposer asked to make a run cheaper cannot name a cheaper model it has
+	 * never heard of, and the Blueprint only names the one in use. The price table
+	 * is the catalog.
+	 */
+	readonly pricedModels: readonly string[]
 }
 
 export interface MergeContext {
@@ -43,6 +51,8 @@ export interface TunerDependencies {
 	/** Runs the suite against a guild directory, for one split. */
 	readonly evaluate: (guildPath: string, split: Split) => Promise<SuiteResult>
 	readonly propose: (context: ProposalContext) => Promise<OpResult<readonly Hypothesis[]>>
+	/** `model — $in/$out per 1M`, for the proposer. Empty when the deployment prices nothing. */
+	readonly pricedModels: readonly string[]
 	readonly merge: (context: MergeContext) => Promise<OpResult<readonly BlueprintChange[]>>
 	readonly now: () => number
 	readonly onEvent?: (message: string) => void
@@ -103,6 +113,7 @@ async function runCycle(
 
 	const proposed = await dependencies.propose({
 		blueprint: blueprintText,
+		pricedModels: dependencies.pricedModels,
 		failingBenchmarks: baseline.benchmarks
 			.filter((summary) => summary.passRate < 1)
 			.map((summary) => `${summary.benchmark} (${String(summary.passes)}/${String(summary.runs)})`),
@@ -154,7 +165,7 @@ async function runCycle(
 	const baselineHeldOut = await dependencies.evaluate(config.guildPath, 'held-out')
 	costUsd += candidateHeldOut.costUsd + baselineHeldOut.costUsd
 
-	const gate = compare(baselineHeldOut, candidateHeldOut, { margin: config.improvementMargin })
+	const gate = compare(baselineHeldOut, candidateHeldOut, { margin: config.improvementMargin, costMargin: config.costMargin })
 	const heldOut: HeldOutGate = {
 		evaluated: true,
 		baselineScore: baselineHeldOut.score,
@@ -207,7 +218,7 @@ async function evaluateHypothesis(
 	}
 
 	const evaluated = await dependencies.evaluate(dependencies.branch.guildPath(branchId), 'optimization')
-	const comparison = compare(baseline, evaluated, { margin: config.improvementMargin })
+	const comparison = compare(baseline, evaluated, { margin: config.improvementMargin, costMargin: config.costMargin })
 
 	return {
 		...shell,

@@ -76,6 +76,7 @@ function createHarness(options: {
 			return options.evaluate(guildPath, split)
 		},
 		propose: async (_context: ProposalContext) => ok(options.hypotheses),
+		pricedModels: [],
 		merge: options.merge ?? (async () => ok([])),
 		now: () => 1_700_000_000_000,
 	}
@@ -88,6 +89,7 @@ function createHarness(options: {
 		maxCostUsd: 10,
 		plateauLimit: 1,
 		improvementMargin: 0.1,
+		costMargin: 0.2,
 		repetitions: 1,
 		bigModel: { provider: 'stub', model: 'big' },
 		...options.config,
@@ -257,6 +259,7 @@ describe('runTuner', () => {
 				promoter: createPromoter({ fs: memory.fs, now: () => 0 }, { guildPath: GUILD, workspacePath: WORKSPACE }),
 				evaluate: async () => createSuiteResult({ score: 0.5 }),
 				propose: async () => ({ kind: 'failed', message: 'the model was unavailable' }),
+				pricedModels: [],
 				merge: async () => ok([]),
 				now: () => 0,
 			},
@@ -268,6 +271,7 @@ describe('runTuner', () => {
 				maxCostUsd: 10,
 				plateauLimit: 1,
 				improvementMargin: 0.1,
+				costMargin: 0.2,
 				repetitions: 1,
 				bigModel: { provider: 'stub', model: 'big' },
 			},

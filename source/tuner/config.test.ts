@@ -10,8 +10,9 @@ const valid = {
 	maxCostUsd: 5,
 	plateauLimit: 2,
 	improvementMargin: 0.1,
+	costMargin: 0.2,
 	repetitions: 1,
-	bigModel: { provider: 'anthropic', model: 'claude-sonnet-4' },
+	bigModel: { provider: 'together', model: 'deepseek-ai/DeepSeek-V4.1-Flash' },
 }
 
 function captureValidationError(subject: () => unknown): ValidationError {

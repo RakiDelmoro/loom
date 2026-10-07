@@ -13,7 +13,7 @@ import { createChangeMerger, createHypothesisProposer, extractJson } from './mod
  * from a reply that was never JSON, and one the first real Tuner cycle hit.
  */
 
-const PROPOSAL = { blueprint: '{"entryRole": "orchestrator"}', failingBenchmarks: [] }
+const PROPOSAL = { blueprint: '{"entryRole": "orchestrator"}', failingBenchmarks: [], pricedModels: [] }
 
 function truncated(): ChatResult {
 	return {

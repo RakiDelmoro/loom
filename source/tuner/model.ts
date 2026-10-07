@@ -72,7 +72,14 @@ function renderProposalRequest(context: ProposalContext): string {
 			? 'Every benchmark passes. Propose changes that make the result cheaper or more robust without losing a pass.'
 			: `Benchmarks that are not fully passing:\n${context.failingBenchmarks.map((line) => `- ${line}`).join('\n')}`
 
-	return `The current Blueprint:\n\n${context.blueprint}\n\n${failures}`
+	const catalog =
+		context.pricedModels.length === 0
+			? ''
+			: `\n\nModels this deployment prices, which are the only ones a change may name:\n${context.pricedModels
+					.map((line) => `- ${line}`)
+					.join('\n')}`
+
+	return `The current Blueprint:\n\n${context.blueprint}${catalog}\n\n${failures}`
 }
 
 /**

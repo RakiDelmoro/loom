@@ -17,6 +17,7 @@ const CONFIG_KEYS = [
 	'maxCostUsd',
 	'plateauLimit',
 	'improvementMargin',
+	'costMargin',
 	'repetitions',
 	'bigModel',
 ] as const
@@ -53,6 +54,7 @@ export function parseTunerConfig(value: unknown, path = 'tuner.json'): TunerConf
 		maxCostUsd: expectNonNegative(record['maxCostUsd'], `${path}.maxCostUsd`),
 		plateauLimit: expectPositiveInteger(record['plateauLimit'], `${path}.plateauLimit`),
 		improvementMargin: expectMargin(record['improvementMargin'], `${path}.improvementMargin`),
+		costMargin: expectMargin(record['costMargin'], `${path}.costMargin`),
 		repetitions: expectPositiveInteger(record['repetitions'], `${path}.repetitions`),
 		bigModel: {
 			provider: expectNonEmptyString(bigModelRecord['provider'], `${path}.bigModel.provider`),

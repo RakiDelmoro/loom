@@ -10,6 +10,7 @@ const config: TunerConfig = {
 	maxCostUsd: 1,
 	plateauLimit: 2,
 	improvementMargin: 0.1,
+	costMargin: 0.2,
 	repetitions: 1,
 	bigModel: { provider: 'stub', model: 'big' },
 }

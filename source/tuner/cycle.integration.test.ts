@@ -207,6 +207,7 @@ function createProject(modelBaseUrl: string): string {
 			maxCostUsd: 5,
 			plateauLimit: 3,
 			improvementMargin: 0.1,
+			costMargin: 0.2,
 			repetitions: 1,
 			bigModel: { provider: 'stub', model: 'test-model' },
 		}),

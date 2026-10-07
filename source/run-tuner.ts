@@ -83,6 +83,11 @@ export async function runTunerCommand(options: RunTunerOptions): Promise<TunerRe
 					fetch: options.fetch,
 				}),
 			propose: createHypothesisProposer({ provider: big.value, model: config.bigModel.model }),
+			// The price table is the only list of models the deployment knows about,
+			// and the proposer needs it to propose a cheaper route.
+			pricedModels: Object.entries(deployment.prices).map(
+				([name, price]) => `${name} — $${String(price.inputPer1M)} in / $${String(price.outputPer1M)} out per 1M`,
+			),
 			merge: createChangeMerger({ provider: big.value, model: config.bigModel.model }),
 			now: () => Date.now(),
 			...(options.onEvent !== undefined ? { onEvent: options.onEvent } : {}),
