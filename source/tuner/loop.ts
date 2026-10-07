@@ -66,7 +66,15 @@ export async function runTuner(dependencies: TunerDependencies, config: TunerCon
 		const cycle = await runCycle(dependencies, config, state.cycles + 1)
 		cycles.push(cycle)
 		state = advance(state, { improved: cycle.promoted ? 1 : 0, costUsd: cycle.costUsd })
-		dependencies.onEvent?.(`cycle ${String(cycle.cycle)}: ${cycle.promoted ? 'promoted a new baseline' : 'no promotion'}`)
+		// "we searched and found nothing" and "we never searched" are different
+		// results, and a cycle line that says "no promotion" for both hides the
+		// second — which is the one an operator needs to act on.
+		const outcome = cycle.promoted
+			? 'promoted a new baseline'
+			: cycle.branches.length === 0
+				? `nothing was proposed: ${cycle.mergeNote ?? 'no reason recorded'}`
+				: 'no promotion'
+		dependencies.onEvent?.(`cycle ${String(cycle.cycle)}: ${outcome}`)
 	}
 
 	return {

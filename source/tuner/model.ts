@@ -11,7 +11,7 @@
 
 import { ValidationError } from '../errors.ts'
 import { isRecord } from '../guards.ts'
-import type { Provider } from '../model/types.ts'
+import type { FinishReason, Provider, Usage } from '../model/types.ts'
 import type { OpResult } from '../result.ts'
 import { failed, ok } from '../result.ts'
 import { parseHypotheses } from './hypothesis.ts'
@@ -75,6 +75,25 @@ function renderProposalRequest(context: ProposalContext): string {
 	return `The current Blueprint:\n\n${context.blueprint}\n\n${failures}`
 }
 
+/**
+ * The output ceiling for a proposal or a merge.
+ *
+ * A proposal carries whole file contents, and a reasoning model spends part of
+ * the same budget thinking before it writes any of them — so this is generous on
+ * purpose. It is a ceiling, not a target: a model that answers in 500 tokens is
+ * not charged for the rest.
+ */
+const BIG_MODEL_MAX_TOKENS = 32768
+
+/** A reply that ran out of room is a different failure from a reply that was never JSON. */
+function diagnoseReply(result: { readonly finishReason: FinishReason; readonly usage: Usage }): string | null {
+	if (result.finishReason === 'length') {
+		const total = result.usage.inputTokens + result.usage.outputTokens
+		return `the reply was cut off at the ${String(BIG_MODEL_MAX_TOKENS)}-token ceiling after ${String(total)} tokens; the JSON was incomplete`
+	}
+	return null
+}
+
 export function createHypothesisProposer(
 	dependencies: BigModelDependencies,
 ): (context: ProposalContext) => Promise<OpResult<readonly Hypothesis[]>> {
@@ -88,9 +107,15 @@ export function createHypothesisProposer(
 			tools: [],
 			// Warmer than a run: hypotheses should differ from one another.
 			temperature: 0.7,
-			maxTokens: 8192,
+			maxTokens: BIG_MODEL_MAX_TOKENS,
 		})
 		if (result.kind !== 'success') return failed(`the proposer could not be reached: ${result.message}`)
+
+		// Checked before the parse, because a truncated reply is not a malformed
+		// one: reporting it as "not JSON" sends the reader looking for a prompt
+		// problem when the answer is a token budget.
+		const truncated = diagnoseReply(result.response)
+		if (truncated !== null) return failed(truncated)
 
 		const parsed = extractJson(result.response.content)
 		if (parsed === null) return failed('the proposer did not reply with JSON')
@@ -127,9 +152,12 @@ export function createChangeMerger(
 			],
 			tools: [],
 			temperature: 0,
-			maxTokens: 8192,
+			maxTokens: BIG_MODEL_MAX_TOKENS,
 		})
 		if (result.kind !== 'success') return failed(`the merger could not be reached: ${result.message}`)
+
+		const truncated = diagnoseReply(result.response)
+		if (truncated !== null) return failed(truncated)
 
 		const parsed = extractJson(result.response.content)
 		if (parsed === null) return failed('the merger did not reply with JSON')
