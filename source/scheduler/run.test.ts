@@ -5,7 +5,7 @@ import { createFakeProvider } from '../model/fake.ts'
 import type { ChatRequest, Provider } from '../model/types.ts'
 import { createTestBlueprint } from '../test-support/blueprint.ts'
 import { createBarrier, createCounterClock, delay } from '../test-support/clock.ts'
-import { call, textResponse, toolCallResponse } from '../test-support/model.ts'
+import { call, toolCallResponse } from '../test-support/model.ts'
 import { createFakeRegistry } from '../test-support/providers.ts'
 import { createRunControl } from '../runs/control.ts'
 import { createFakeWorktrees, type FakeWorktrees } from '../test-support/worktrees.ts'
@@ -70,7 +70,7 @@ function sawToolResult(request: ChatRequest): boolean {
 describe('createScheduler', () => {
 	test('runs the entry role and records it', async () => {
 		const blueprint = createTestBlueprint({ orchestrator: { tools: [], isolation: 'shared' } })
-		const harness = createRun({ blueprint, provider: createFakeProvider([textResponse('all done')]) })
+		const harness = createRun({ blueprint, provider: createFakeProvider([toolCallResponse([call('f', 'finish', { status: 'success', summary: 'all done' })])]) })
 
 		const result = await harness.run({ runId: 'run-1', task: 'do it' })
 
@@ -354,7 +354,7 @@ describe('createScheduler', () => {
 
 		const result = await createRun({
 			blueprint,
-			provider: createFakeProvider([textResponse('done')]),
+			provider: createFakeProvider([toolCallResponse([call('f', 'finish', { status: 'success', summary: 'done' })])]),
 			worktrees,
 		}).run({ runId: 'run-1', task: 'go' })
 
@@ -368,7 +368,7 @@ describe('createScheduler', () => {
 
 		const result = await createRun({
 			blueprint,
-			provider: createFakeProvider([textResponse('nothing to do')]),
+			provider: createFakeProvider([toolCallResponse([call('f', 'finish', { status: 'success', summary: 'nothing to do' })])]),
 			worktrees: createFakeWorktrees({ dirty: false }),
 		}).run({ runId: 'run-1', task: 'go' })
 
@@ -404,7 +404,7 @@ describe('createScheduler', () => {
 		const blueprint = createTestBlueprint({ orchestrator: { tools: [], isolation: 'shared' } })
 		const harness = createRun({
 			blueprint,
-			provider: createFakeProvider([textResponse('done', EXPENSIVE_USAGE)]),
+			provider: createFakeProvider([toolCallResponse([call('f', 'finish', { status: 'success', summary: 'done' })], EXPENSIVE_USAGE)]),
 			prices: { 'test-model': PRICE },
 		})
 
@@ -423,7 +423,7 @@ describe('createScheduler', () => {
 		)
 		const harness = createRun({
 			blueprint,
-			provider: createFakeProvider([textResponse('done', EXPENSIVE_USAGE)]),
+			provider: createFakeProvider([toolCallResponse([call('f', 'finish', { status: 'success', summary: 'done' })], EXPENSIVE_USAGE)]),
 			prices: { 'test-model': PRICE },
 		})
 
@@ -448,14 +448,16 @@ describe('createScheduler', () => {
 			{ alerts: { costUsd: 1 } },
 		)
 		const provider = createFakeProvider((request) => {
-			if (systemOf(request).includes('worker')) return textResponse('worker done', EXPENSIVE_USAGE)
+			if (systemOf(request).includes('worker')) {
+				return toolCallResponse([call('f', 'finish', { status: 'success', summary: 'worker done' })], EXPENSIVE_USAGE)
+			}
 			if (!sawToolResult(request)) {
 				return toolCallResponse(
 					[call('a', 'agent', { role: 'worker', task: 'x' }), call('b', 'agent', { role: 'worker', task: 'y' })],
 					EXPENSIVE_USAGE,
 				)
 			}
-			return textResponse('all done', EXPENSIVE_USAGE)
+			return toolCallResponse([call('f', 'finish', { status: 'success', summary: 'all done' })], EXPENSIVE_USAGE)
 		})
 
 		const harness = createRun({ blueprint, provider, prices: { 'test-model': PRICE } })
@@ -472,7 +474,7 @@ describe('createScheduler', () => {
 		)
 		const harness = createRun({
 			blueprint,
-			provider: createFakeProvider([textResponse('done', EXPENSIVE_USAGE)]),
+			provider: createFakeProvider([toolCallResponse([call('f', 'finish', { status: 'success', summary: 'done' })], EXPENSIVE_USAGE)]),
 			prices: { 'test-model': PRICE },
 		})
 
@@ -487,7 +489,7 @@ describe('createScheduler', () => {
 		const blueprint = createTestBlueprint({ orchestrator: { tools: [], isolation: 'shared' } })
 		const harness = createRun({
 			blueprint,
-			provider: createFakeProvider([textResponse('done', EXPENSIVE_USAGE)]),
+			provider: createFakeProvider([toolCallResponse([call('f', 'finish', { status: 'success', summary: 'done' })], EXPENSIVE_USAGE)]),
 			prices: { 'test-model': PRICE },
 		})
 
@@ -499,7 +501,7 @@ describe('createScheduler', () => {
 		const blueprint = createTestBlueprint({ orchestrator: { tools: [], isolation: 'shared' } })
 		const harness = createRun({
 			blueprint,
-			provider: createFakeProvider([textResponse('done', EXPENSIVE_USAGE)]),
+			provider: createFakeProvider([toolCallResponse([call('f', 'finish', { status: 'success', summary: 'done' })], EXPENSIVE_USAGE)]),
 		})
 
 		await harness.run({ runId: 'run-1', task: 'go' })

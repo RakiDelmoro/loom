@@ -50,10 +50,29 @@ describe('runAgentLoop', () => {
 		expect(outcome.turns).toBe(1)
 	})
 
-	test('a reply with no tool call is an implicit finish', async () => {
-		const provider = createFakeProvider([textResponse('I did it')])
+	test('a reply with no tool call is not a finish — the role is told to call finish', async () => {
+		// Reading prose as a finish let a run report `success` having done nothing:
+		// the orchestrator failed to delegate, said "I'll read the test files now",
+		// and stopped. The engine cannot tell a conclusion from a statement of intent,
+		// so it asks for the shape it can read.
+		const provider = createFakeProvider((request) => {
+			const nudged = request.messages.some((message) => message.content.includes('Call `finish`'))
+			if (!nudged) return textResponse('I will read the test files now')
+			return toolCallResponse([call('f', 'finish', { status: 'success', summary: 'now I really did it' })])
+		})
+
 		const outcome = await runAgentLoop(dependencies(provider), request)
-		expect(outcome.card).toEqual({ status: 'success', summary: 'I did it' })
+		expect(outcome.card).toEqual({ status: 'success', summary: 'now I really did it' })
+	})
+
+	test('a role that will not finish is called unfinished, and its words are kept', async () => {
+		const provider = createFakeProvider(() => textResponse('let me think about it'))
+		const outcome = await runAgentLoop(dependencies(provider), request)
+
+		expect(outcome.card.status).toBe('error')
+		expect(outcome.card.error?.kind).toBe('unfinished')
+		// What it said is the only clue to why, so it is carried, not discarded.
+		expect(outcome.card.summary).toContain('let me think about it')
 	})
 
 	test('dispatches a tool call and feeds its result back', async () => {
@@ -284,15 +303,14 @@ describe('runAgentLoop', () => {
 		expect(events.filter((event) => event.type === 'model_retry')).toHaveLength(0)
 	})
 
-	test('an answer with neither content nor a tool call is not a finish', async () => {
-		// This is how a coder came back "successful" having committed nothing:
-		// an empty completion was read as the role finishing, and named "Completed.".
+	test('an empty answer is not a finish either — it is the same missing tool call', async () => {
+		// This is how a coder came back "successful" having committed nothing: an
+		// empty completion was read as the role finishing, and named "Completed.".
 		const provider = createFakeProvider(() => textResponse(''))
 		const outcome = await runAgentLoop(dependencies(provider), request)
 
 		expect(outcome.card.status).toBe('error')
-		expect(outcome.card.error?.kind).toBe('empty_completion')
-		expect(outcome.card.summary).not.toContain('Completed')
+		expect(outcome.card.error?.kind).toBe('unfinished')
 	})
 
 	test('an empty answer followed by a real one is only a hiccup', async () => {

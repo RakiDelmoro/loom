@@ -99,6 +99,8 @@ export async function runAgentLoop(
 	]
 	const usage: UsageTotals = { inputTokens: 0, cachedInputTokens: 0, outputTokens: 0 }
 	let turns = 0
+	/** How many times the role has been told it must call `finish` rather than going quiet. */
+	let nudges = 0
 
 	while (turns < request.maxTurns) {
 		turns += 1
@@ -164,23 +166,6 @@ export async function runAgentLoop(
 			)
 		}
 
-		if (isEmptyCompletion(result)) {
-			return settle(
-				{
-					status: 'error',
-					summary: `the model answered with nothing, ${String(MODEL_RETRY_LIMIT + 1)} times running`,
-					error: {
-						kind: 'empty_completion',
-						message: 'the endpoint returned neither content nor a tool call, repeatedly',
-					},
-				},
-				turns,
-				usage,
-				startedAt,
-				dependencies.now(),
-			)
-		}
-
 		dependencies.events({
 			type: 'model_call',
 			agentId: request.agentId,
@@ -200,16 +185,44 @@ export async function runAgentLoop(
 		})
 
 		if (toolCalls.length === 0) {
-			// Answered in prose without asking for a tool: that is a finish. An empty
-			// answer is not — it was retried above, and is an error by the time we are
-			// here, because "Completed." is a claim and not a default.
-			return settle(
-				{ status: 'success', summary: result.response.content.trim() },
-				turns,
-				usage,
-				startedAt,
-				dependencies.now(),
-			)
+			// A role ends by calling `finish`. Reading prose as a finish let a run
+			// report `success` having done nothing at all: the orchestrator failed to
+			// delegate, then said "I'll read the test files directly to understand the
+			// failing tests" and stopped — two model calls, no file touched.
+			//
+			// The engine cannot tell a conclusion from a statement of intent, and it
+			// should not try. It says what shape it needs instead, which is what it
+			// already does for a malformed `finish` — one turn for the model to say
+			// something the engine can read, before the role is called unfinished.
+			nudges += 1
+			if (nudges > MAX_NUDGES) {
+				const said = result.response.content.trim()
+				return settle(
+					{
+						status: 'error',
+						summary:
+							said === ''
+								? `the role went quiet ${String(nudges)} times running without finishing`
+								: `the role would not finish, saying: ${said.slice(0, 240)}`,
+						error: {
+							kind: 'unfinished',
+							message: 'the model answered without calling a tool, repeatedly, instead of calling finish',
+						},
+					},
+					turns,
+					usage,
+					startedAt,
+					dependencies.now(),
+				)
+			}
+
+			messages.push({
+				role: 'user',
+				content:
+					'You answered without calling a tool, which the engine cannot use as a result. ' +
+					'Call `finish` with a status and a summary if you are done, or call a tool if you are not.',
+			})
+			continue
 		}
 
 		const finishCall = toolCalls.find((call) => call.name === FINISH_TOOL)
@@ -375,10 +388,14 @@ export function workspaceBriefing(workspaceRoot: string): string {
 const MODEL_RETRY_LIMIT = 3
 const MODEL_RETRY_BASE_MS = 250
 
-/** An endpoint answering with neither content nor a tool call has not answered. */
-function isEmptyCompletion(result: ChatResult): boolean {
-	return result.kind === 'success' && result.response.toolCalls.length === 0 && result.response.content.trim() === ''
-}
+/**
+ * How many times a role is told to call `finish` before it is called unfinished.
+ *
+ * A legitimate conclusion and a statement of intent read the same to the engine —
+ * "The merge is already complete" against "I'll read the test files now" — so it
+ * asks for the one shape it can read rather than guessing between them.
+ */
+const MAX_NUDGES = 2
 
 /**
  * A call the endpoint may do better on if asked again.
@@ -392,8 +409,6 @@ function isRetryable(result: ChatResult): boolean {
 		case 'timeout':
 		case 'rate_limited':
 			return true
-		case 'success':
-			return isEmptyCompletion(result)
 		default:
 			return false
 	}
