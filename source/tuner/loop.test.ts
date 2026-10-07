@@ -166,6 +166,32 @@ describe('runTuner', () => {
 		expect(harness.evaluated.some((call) => call.guildPath.includes('h-unsafe'))).toBe(false)
 	})
 
+	test('a candidate that changes the model is rejected before it is scored', async () => {
+		// The pin. The search tunes the conditions one model works under; a win that
+		// came from naming a different model would teach nothing about guiding this
+		// one, so the move is not available at any price.
+		const repointed = JSON.stringify({
+			entryRole: 'orchestrator',
+			roles: { orchestrator: { prompt: 'prompts/orchestrator.md', model: 'default', tools: ['finish'] } },
+			tools: ['tools/finish.json'],
+			routing: { default: { provider: 'test', model: 'a-cheaper-model', temperature: 0 } },
+			budgets: { maxAgentDepth: 2, maxConcurrentAgents: 2, toolTimeoutSeconds: 30 },
+			permissions: { mode: 'workspace-write' },
+		})
+		const harness = createHarness({
+			hypotheses: [hypothesis('h-cheaper', [{ path: 'loom.json', content: repointed }])],
+			evaluate: scoringEvaluator(1),
+		})
+
+		const report = await harness.run()
+		const branch = report.cycles[0]?.branches[0]
+
+		expect(branch?.contractViolations).toHaveLength(1)
+		expect(branch?.contractViolations[0]).toContain('a-cheaper-model')
+		expect(report.cycles[0]?.promoted).toBe(false)
+		expect(harness.evaluated.some((call) => call.guildPath.includes('h-cheaper'))).toBe(false)
+	})
+
 	test('a candidate that improves the optimization split but not the held-out split is not promoted', async () => {
 		const harness = createHarness({
 			hypotheses: [hypothesis('h-overfit', [PROMPT_CHANGE])],
