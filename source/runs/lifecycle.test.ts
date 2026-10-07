@@ -39,7 +39,7 @@ describe('mergeBranch', () => {
 	})
 
 	test('reports a merge that git itself refuses', () => {
-		const { lifecycle } = createLifecycle((args) => {
+		const { lifecycle, git } = createLifecycle((args) => {
 			if (args.includes('status')) return ok('')
 			if (args.includes('merge')) return { kind: 'failed', message: 'CONFLICT (content): Merge conflict in a.ts' }
 			return undefined
@@ -48,6 +48,11 @@ describe('mergeBranch', () => {
 		const result = lifecycle.mergeBranch('loom/run-1/worker-1-2')
 		expect(result.kind).toBe('failed')
 		if (result.kind === 'failed') expect(result.message).toContain('CONFLICT')
+
+		// And the repository is left as it was found. A conflicted merge stops
+		// mid-merge, and a base in that state refuses every later operation —
+		// including the `undo` that would clean up after it.
+		expect(git.commands.at(-1)).toEqual(['-C', '/repo', 'merge', '--abort'])
 	})
 })
 

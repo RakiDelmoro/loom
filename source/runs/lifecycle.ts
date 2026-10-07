@@ -155,7 +155,16 @@ export function createRunLifecycle(
 			if (clean.kind !== 'ok') return failed(clean.message)
 
 			const merged = git.run(['-C', repoPath, 'merge', '--no-ff', '--no-edit', '-m', `Loom: merge ${branch}`, branch])
-			if (merged.kind !== 'ok') return failed(merged.message)
+			if (merged.kind !== 'ok') {
+				// A conflicted merge leaves the tree mid-merge: conflict markers in
+				// the worktree and unmerged paths in the index. The conflict is
+				// reported, but the repository is left exactly as it was found —
+				// because every later operation refuses a dirty tree, so one
+				// conflict would wedge the base and lock out the `undo` that would
+				// tidy up. The integration path already does this; this one did not.
+				git.run(['-C', repoPath, 'merge', '--abort'])
+				return failed(merged.message)
+			}
 
 			const head = git.run(['-C', repoPath, 'rev-parse', 'HEAD'])
 			if (head.kind !== 'ok') return failed(head.message)
