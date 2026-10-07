@@ -126,9 +126,19 @@ An optional `alerts` block in the Blueprint can name a dollar or token threshold
 
 ## 5. Degradation and fallback
 
-- **Provider unavailable.** Retry with bounded exponential backoff; after exhaustion, a typed `unavailable` result. If the Blueprint declares a `fallback` profile for the role, the engine retries once on the fallback (e.g. cloud → local). Fallback is opt-in, never silent.
-- **Context overflow.** The provider's own rejection is ground truth; the engine compacts the agent's conversation and retries, bounded. (Detailed in the engine's context policy, a later document.)
-- **Rate limits.** `rate_limited` is a retryable typed result with the provider's retry hint if present.
+**Built:**
+
+- **Provider unavailable.** Retried with bounded exponential backoff — 250ms, 500ms, 1s — and after exhaustion a typed `unavailable` result. On a local model this is not an edge case: `llama-server` answers `500` when it cannot parse a tool call a quantised model emitted, and dying on that would make autonomy impossible. Every attempt is billed, the discarded ones included.
+- **An empty answer.** An endpoint returning neither content nor a tool call is retried the same way, then ends the role with `empty_completion`. It is *not* a finish: reading it as one produced a coder that reported `"Completed."` having committed nothing.
+- **Rate limits.** `rate_limited` is a retryable typed result and is retried on the same schedule.
+- **Unparseable answers.** `invalid_response` is deliberately **not** retried — the provider answered with nonsense, and asking the same thing again does not fix that.
+
+Each retry is written to the event log as `model_retry`, so a recovery is visible rather than inferred from a run that mysteriously carried on.
+
+**Described here, not built:**
+
+- **A `fallback` profile.** The design is above; there is no `fallback` key in the Blueprint and no code that reads one. A role either reaches its endpoint or fails.
+- **Context overflow → compact and retry.** There is no compaction and no handoff. This is the ceiling on long-horizon autonomy: a run that keeps working will walk into the model's context window, and nothing currently carries it past that. The reference's answer is a *handoff* — the role finishes with a brief and its parent re-delegates a fresh instance — and Loom has no equivalent.
 
 ---
 
