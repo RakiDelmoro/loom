@@ -46,9 +46,12 @@ describe('parseBenchmarkSpec', () => {
 		})
 	})
 
-	test('carries an optional judge rubric', () => {
-		const spec = parseBenchmarkSpec({ ...valid, judge: { rubric: 'Is the cause fixed?' } }, 'spec.json')
-		expect(spec.judge?.rubric).toBe('Is the cause fixed?')
+	test('refuses a judge, which the Bench no longer has', () => {
+		// Removed deliberately. The reference scores with a command, an exit code,
+		// and a stdout substring, and a second grading layer is a liability its own
+		// docs called one. A spec that still declares one is refused, not ignored.
+		const failed = captureValidationError(() => parseBenchmarkSpec({ ...valid, judge: { rubric: 'x' } }, 'spec.json'))
+		expect(failed.path).toBe('spec.json.judge')
 	})
 
 	test('rejects an unknown key and names its path', () => {
@@ -92,22 +95,16 @@ describe('parseSuiteConfig', () => {
 		})
 	})
 
-	test('parses an optional judge', () => {
-		const config = parseSuiteConfig(
-			{ optimization: [], heldOut: [], judge: { provider: 'stub', model: 'judge-model' } },
-			'suite.json',
+	test('refuses a suite that configures a judge', () => {
+		const failed = captureValidationError(() =>
+			parseSuiteConfig({ optimization: [], heldOut: [], judge: {} }, 'suite.json'),
 		)
-		expect(config.judge).toEqual({ provider: 'stub', model: 'judge-model' })
+		expect(failed.path).toBe('suite.json.judge')
 	})
 
 	test('rejects an unknown key', () => {
 		expect(captureValidationError(() => parseSuiteConfig({ optimization: [], heldOut: [], split: 'x' }, 'suite.json')).path).toBe(
 			'suite.json.split',
 		)
-	})
-
-	test('rejects a judge with no model', () => {
-		const broken = { optimization: [], heldOut: [], judge: { provider: 'stub' } }
-		expect(captureValidationError(() => parseSuiteConfig(broken, 'suite.json')).path).toBe('suite.json.judge.model')
 	})
 })

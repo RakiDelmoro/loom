@@ -6,7 +6,7 @@ function outcome(
 	benchmark: string,
 	repetition: number,
 	status: OutcomeStatus,
-	score: number,
+	score: 0 | 1,
 	costUsd: number,
 	wallTimeSeconds: number,
 ): BenchmarkOutcome {
@@ -52,10 +52,6 @@ describe('aggregate', () => {
 	test('an empty run scores zero', () => {
 		expect(aggregate([])).toEqual({ score: 0, interval: { low: 0, high: 0 }, costUsd: 0, wallTimeSeconds: 0 })
 	})
-
-	test('a judge score contributes partially rather than all-or-nothing', () => {
-		expect(aggregate([outcome('a', 1, 'pass', 2 / 3, 0, 0)]).score).toBeCloseTo(2 / 3, 10)
-	})
 })
 
 describe('summarize', () => {
@@ -72,7 +68,7 @@ describe('summarize', () => {
 
 	test('counts passes against runs, not scores', () => {
 		const summaries = summarize(
-			[outcome('a', 1, 'pass', 1, 0, 0), outcome('a', 2, 'pass', 0.5, 0, 0), outcome('a', 3, 'fail', 0, 0, 0)],
+			[outcome('a', 1, 'pass', 1, 0, 0), outcome('a', 2, 'pass', 1, 0, 0), outcome('a', 3, 'fail', 0, 0, 0)],
 			['a'],
 			'optimization',
 		)

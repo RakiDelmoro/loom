@@ -2,7 +2,6 @@ import { describe, expect, test } from 'bun:test'
 import type { OpResult } from '../result.ts'
 import { ok } from '../result.ts'
 import { createCounterClock } from '../test-support/clock.ts'
-import type { JudgeRequest } from './judge.ts'
 import type { LoadedSuite } from './load.ts'
 import { runSuite, type BenchmarkTaskRun, type SuiteRunnerDependencies } from './runner.ts'
 import type { BenchmarkSpec, Split } from './types.ts'
@@ -21,7 +20,6 @@ function spec(id: string): BenchmarkSpec {
 			expectedStdoutContains: [],
 			timeoutSeconds: 30,
 		},
-		judge: { rubric: 'Does the work address the task?' },
 	}
 }
 
@@ -37,7 +35,6 @@ const FAILING: ValidationObservation = { exitCode: 1, stdout: 'boom', timedOut: 
 function createHarness(options: {
 	readonly task?: (workspace: string, task: string) => Promise<BenchmarkTaskRun>
 	readonly observation?: ValidationObservation
-	readonly judge?: ((request: JudgeRequest) => Promise<OpResult<number>>) | null
 } = {}) {
 	const created: string[] = []
 	const removed: string[] = []
@@ -61,7 +58,6 @@ function createHarness(options: {
 			return { status: 'success', runId: 'run-1', costUsd: 0.01, reasons: [] }
 		},
 		runValidation: () => options.observation ?? PASSING,
-		judge: options.judge ?? null,
 		now: createCounterClock(1_700_000_000_000),
 	}
 
@@ -164,36 +160,9 @@ describe('runSuite', () => {
 		expect(result.benchmarks.every((summary) => summary.passRate === 1)).toBe(true)
 	})
 
-	test('a judge grades quality above the deterministic gate', async () => {
-		const harness = createHarness({ judge: async () => ok(0.5) })
-		const result = await harness.run('optimization')
 
-		expect(result.outcomes[0]?.status).toBe('pass')
-		expect(result.outcomes[0]?.score).toBeCloseTo(0.5, 10)
-	})
 
-	test('a judge never rescues a run whose command failed', async () => {
-		const harness = createHarness({ observation: FAILING, judge: async () => ok(1) })
-		const outcome = (await harness.run('optimization')).outcomes[0]
 
-		expect(outcome?.status).toBe('fail')
-		expect(outcome?.score).toBe(0)
-		expect(outcome?.reasons).toEqual(['expected exit code 0, got 1'])
-	})
-
-	test('a judge scoring zero demotes a passing run', async () => {
-		const harness = createHarness({ judge: async () => ok(0) })
-		expect((await harness.run('optimization')).outcomes[0]?.status).toBe('fail')
-	})
-
-	test('a judge that errors does not zero a passing run', async () => {
-		const harness = createHarness({ judge: async () => ({ kind: 'failed', message: 'judge down' }) })
-		const outcome = (await harness.run('optimization')).outcomes[0]
-
-		expect(outcome?.status).toBe('pass')
-		expect(outcome?.score).toBe(1)
-		expect(outcome?.reasons).toContain('the judge could not score this run: judge down')
-	})
 
 	test('a benchmark whose workspace cannot be built is an error', async () => {
 		const harness = createHarness()

@@ -1,13 +1,12 @@
 /**
  * The composition root for a suite run.
  *
- * It wires the real sandbox, task runner, validation, and judge, and nothing
- * else does — so the runner above it stays exercisable in memory.
+ * It wires the real sandbox, the task runner, and validation, and nothing else
+ * does — so the runner above it stays exercisable in memory.
  */
 
 import * as path from 'node:path'
 import { createBenchmarkSandbox } from './bench/sandbox.ts'
-import { judgeWork, type JudgeRequest } from './bench/judge.ts'
 import { loadSuite } from './bench/load.ts'
 import { runSuite } from './bench/runner.ts'
 import type { BenchmarkOutcome, Split, SuiteResult } from './bench/types.ts'
@@ -41,15 +40,6 @@ export async function runBench(options: RunBenchOptions): Promise<SuiteResult> {
 	const deployment = loadDeployment({ readTextFile: fs.readTextFile }, options.deploymentPath)
 
 	const providers = createProviderRegistry({ fetch: options.fetch, env: options.env }, deployment)
-
-	let judge: ((request: JudgeRequest) => Promise<OpResult<number>>) | null = null
-	const judgeConfig = suite.config.judge
-	if (judgeConfig !== undefined) {
-		const created = providers.create(judgeConfig.provider)
-		if (created.kind !== 'ok') throw new Error(`the judge cannot be built: ${created.message}`)
-		const judgeProvider = created.value
-		judge = (request) => judgeWork({ provider: judgeProvider, model: judgeConfig.model }, request)
-	}
 
 	const runCommand = createRunCommand()
 	const result = await runSuite(
@@ -92,7 +82,6 @@ export async function runBench(options: RunBenchOptions): Promise<SuiteResult> {
 				return { status: outcome.status, runId: outcome.manifest.runId, costUsd: outcome.manifest.costUsd, reasons }
 			},
 			runValidation: (workspaceRoot, spec) => runValidation({ fs, runCommand }, workspaceRoot, spec),
-			judge,
 			now: () => Date.now(),
 			...(options.onOutcome !== undefined ? { onOutcome: options.onOutcome } : {}),
 		},

@@ -31,8 +31,7 @@ benchmarks/
     "expectedFiles": ["src/range.ts"],
     "expectedStdoutContains": ["pass"],
     "timeoutSeconds": 120            // optional, defaults to 120
-  },
-  "judge": { "rubric": "Does the fix address the root cause rather than the symptom?" }
+  }
 }
 ```
 
@@ -43,8 +42,7 @@ benchmarks/
     "fix_off_by_one", "fix_import_path", "implement_clamp", "add_default_parameter",
     "fix_shared_mutation", "fix_error_swallowing", "implement_retry_budget"
   ],
-  "heldOut": ["fix_string_case", "add_export", "fix_tie_order"],
-  "judge": { "provider": "together", "model": "deepseek-ai/DeepSeek-V4.1-Flash" }  // optional
+  "heldOut": ["fix_string_case", "add_export", "fix_tie_order"]
 }
 ```
 
@@ -54,15 +52,19 @@ benchmarks/
 
 ---
 
-## 2. Validation — deterministic first, judge second
+## 2. Validation — the command is the contract
 
-**Layer 1: deterministic.** Files exist; command exits with the expected code; stdout contains the expected substrings. Binary, reproducible, cheap. Most benchmarks should be gradable here alone.
+Files exist; the command exits with the expected code; stdout contains the expected substrings. Binary, reproducible, cheap. That is the whole of it.
 
-**Layer 2: LLM judge.** For work the command cannot fully describe — a refactor that must keep the tests green while improving structure, a design, a document — a judge model scores against a rubric on a small ordinal scale (0–3), normalized to 0–1. The judge is a routed model call (see [model-routing.md](model-routing.md)), so it can be stronger than the worker.
+**There is deliberately no model grading layer.** An LLM judge was designed and built, and then removed. Three reasons, in order of weight:
 
-**The command gates; the judge grades above it.** A deterministic failure is a failure, full stop — a judge can never rescue work whose tests fail. A deterministic pass with a declared judge is scored by the rubric, so the judge can *demote* work that passes the tests but is poor.
+1. **It is a measured liability.** A judge that is noisy destroys the bench, and the mitigations (rubric-pinned prompts, temperature 0, blindness to authorship, spot-checked agreement against human labels) are a great deal of machinery for a second opinion on work that already passes its tests.
+2. **It puts a model back inside the scoreboard.** Loom's whole shape is a small model working *inside* a run and a large model working *outside* it, on the configuration. A judging model is a third seat that is neither — it grades work rather than doing it or improving the conditions for it. Removing it leaves two seats, which is the shape the project is built on.
+3. **It made the statistic approximate.** Scores were fractions, so the suite's interval was a Wilson interval *over* a sum of fractions. With every score 0 or 1 that sum is a count of passes, and the interval is an exact Wilson interval over a proportion.
 
-**Judges are a measured liability.** A judge that is itself noisy destroys the bench. Mitigations: rubric-pinned prompts, temperature 0, the judge is told the task and what the checks observed but **never who produced the work**, and judge-vs-human agreement is spot-checked on a labeled subset (a backlog item: a small human-labeled calibration set). A judge that cannot be reached leaves a passing run scored 1 rather than silently zeroing it.
+The reference implementation never had one: it scores with a command, an exit code, and a substring of stdout. This is a return to that.
+
+A task whose success the tests cannot describe is a task whose benchmark needs a better test, not a model's opinion.
 
 ---
 
@@ -74,7 +76,7 @@ For each benchmark, for each repetition:
 2. **Drive.** Run the task against that copy, with the Blueprint under test and `auto` autonomy — so the agents' branches are merged and validation sees the system's *real* output, merge included.
 3. **Collect.** Capture status, cost, wall time, and the run id.
 4. **Integrity.** Refuse to score a run whose workspace is not the system's output. Two conditions disqualify it: a **merge that did not land** (a conflict, or a base tree too dirty to merge into), and a **base repository left with uncommitted changes** — which means something wrote outside its worktree, because the worktree is where a write is supposed to land and the merge is how it is supposed to arrive. A disqualified run is an `error` carrying the reason, and it is checked **before** validation: reading a tree the run did not produce is worse than useless, and a passing test suite on such a tree is exactly the false credit this gate exists to refuse.
-5. **Validate.** Deterministic checks first; then the judge, if the benchmark declares one and the checks passed.
+5. **Validate.** Files, exit code, stdout. A run whose checks fail is a `fail`; a run whose checks pass is a `pass`.
 6. **Teardown.** Remove the copy — on success, error, and a thrown exception alike. A leaked workspace is a bug, and a suite creates one per repetition.
 
 The integrity gate is not decoration. Before it existed, a real-model run passed `implement_clamp` at 1/1 while the change it was credited for had arrived by a shell heredoc written into the *base* repository, bypassing every worktree and every merge — and both candidate branches were left unmerged. The score was an artifact of an escape, not a measurement of the system.
@@ -90,12 +92,11 @@ The integrity gate is not decoration. Before it existed, a real-model run passed
 Per benchmark, per repetition:
 
 ```
-score = 1                                  when the deterministic checks pass (no judge declared)
-score = the judge's normalized score       when they pass and a judge is declared
-score = 0                                  when they fail
+score = 1   when the deterministic checks pass
+score = 0   when they fail
 ```
 
-Per Blueprint (the suite score): the **mean of those scores**, reported with a **95% Wilson interval**.
+Per Blueprint (the suite score): the **mean of those scores**, reported with a **95% Wilson interval**. Because each score is 0 or 1, the mean is a pass rate and the interval is a Wilson interval over a proportion exactly.
 
 - **Variance.** A difference smaller than the interval is **not** an improvement. This is the rule that stops the loop chasing noise.
 - **Cost and latency are reported, not folded in.** Turning dollars into "correctness points" needs an exchange rate, and inventing one in the bench would be worse than exposing both numbers and letting the comparison rule decide. A run that scores well but costs a fortune is visible as exactly that.

@@ -31,7 +31,7 @@ export function createSuiteResult(options: SuiteFixtureOptions): SuiteResult {
 		benchmark: summary.benchmark,
 		repetition: 1,
 		status: summary.passRate >= 1 ? 'pass' : 'fail',
-		score: summary.passRate,
+		score: summary.passRate >= 1 ? 1 : 0,
 		reasons: [],
 		runId: 'run-1',
 		costUsd: 0,

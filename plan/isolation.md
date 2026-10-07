@@ -106,7 +106,7 @@ scheduler
 
 **Cancellation.** A parent that finishes (or errors) cancels its unfinished children: signal the pool, drain their subprocesses, remove their worktrees, record `cancelled` in the manifest. A cancelled child's partial work is **not** committed.
 
-**Best-of-N.** A role may request `n` attempts of the same task; the pool creates `n` worktrees, runs them, and a judge (a routed model call or a deterministic scorer) selects one. The losers are recorded and cleaned. This is a first-class strategy, not a hack — and it is only possible because worktrees are cheap.
+**Best-of-N.** A role may request `n` attempts of the same task; the pool creates `n` worktrees, runs them, and a deterministic scorer — the same validation a benchmark uses — selects one. The losers are recorded and cleaned. This is a first-class strategy, not a hack — and it is only possible because worktrees are cheap.
 
 **Determinism.** Given the same Blueprint, base ref, and a scripted provider, the manifest is identical except for timestamps, shas, and ids. Tests assert this.
 

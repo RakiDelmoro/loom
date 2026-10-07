@@ -22,11 +22,6 @@ export interface ValidationSpec {
 	readonly timeoutSeconds: number
 }
 
-/** A rubric for work that is not binary — a refactor, a design, a document. */
-export interface JudgeSpec {
-	readonly rubric: string
-}
-
 export interface BenchmarkSpec {
 	readonly id: string
 	readonly taskType: string
@@ -34,20 +29,12 @@ export interface BenchmarkSpec {
 	/** The text handed to the entry role. */
 	readonly task: string
 	readonly validation: ValidationSpec
-	readonly judge?: JudgeSpec
-}
-
-/** Which model grades work that is not binary. Optional: a suite may have none. */
-export interface JudgeConfig {
-	readonly provider: string
-	readonly model: string
 }
 
 /** Which benchmarks the optimizer may see, and which it never may. */
 export interface SuiteConfig {
 	readonly optimization: readonly string[]
 	readonly heldOut: readonly string[]
-	readonly judge?: JudgeConfig
 }
 
 export type OutcomeStatus = 'pass' | 'fail' | 'error'
@@ -57,8 +44,14 @@ export interface BenchmarkOutcome {
 	readonly benchmark: string
 	readonly repetition: number
 	readonly status: OutcomeStatus
-	/** 1 for a deterministic pass, the normalized judge score, or 0. */
-	readonly score: number
+	/**
+	 * 1 for a pass, 0 otherwise.
+	 *
+	 * Binary rather than a graded score, ever since the Bench stopped having a
+	 * judge: which is what lets the suite's interval be an exact Wilson interval
+	 * over a proportion rather than an approximation of one.
+	 */
+	readonly score: 0 | 1
 	readonly reasons: readonly string[]
 	readonly runId: string | null
 	readonly costUsd: number

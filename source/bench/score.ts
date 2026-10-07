@@ -61,8 +61,9 @@ export function aggregate(outcomes: readonly BenchmarkOutcome[]): Aggregates {
 	const mean = total === 0 ? 0 : score / total
 	return {
 		score: mean,
-		// The interval is over the same mean, so it is scaled from the count of
-		// perfect runs rather than assumed binary — every run contributes its score.
+		// Every outcome is 0 or 1, so this sum is a count of passes and the
+		// interval is a Wilson interval over a proportion exactly — not the
+		// approximation it was when a judge could score a run at 2/3.
 		interval: wilsonInterval(score, total),
 		costUsd,
 		wallTimeSeconds,

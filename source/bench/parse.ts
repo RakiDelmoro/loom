@@ -7,15 +7,13 @@
  */
 
 import { expectEnum, expectNonEmptyString, expectPositiveInteger, expectRecord, expectStringArray, rejectUnknownKeys } from '../validation.ts'
-import type { BenchmarkSpec, Difficulty, JudgeConfig, JudgeSpec, SuiteConfig, ValidationSpec } from './types.ts'
+import type { BenchmarkSpec, Difficulty, SuiteConfig, ValidationSpec } from './types.ts'
 
 const DIFFICULTIES = ['easy', 'medium', 'hard'] as const
 
-const SPEC_KEYS = ['id', 'taskType', 'difficulty', 'task', 'validation', 'judge'] as const
+const SPEC_KEYS = ['id', 'taskType', 'difficulty', 'task', 'validation'] as const
 const VALIDATION_KEYS = ['command', 'expectedExitCode', 'expectedFiles', 'expectedStdoutContains', 'timeoutSeconds'] as const
-const JUDGE_KEYS = ['rubric'] as const
-const SUITE_KEYS = ['optimization', 'heldOut', 'judge'] as const
-const SUITE_JUDGE_KEYS = ['provider', 'model'] as const
+const SUITE_KEYS = ['optimization', 'heldOut'] as const
 
 function parseValidation(value: unknown, path: string): ValidationSpec {
 	const record = expectRecord(value, path)
@@ -43,12 +41,6 @@ function expectInteger(value: unknown, path: string): number {
 	return value
 }
 
-function parseJudge(value: unknown, path: string): JudgeSpec {
-	const record = expectRecord(value, path)
-	rejectUnknownKeys(record, JUDGE_KEYS, path)
-	return { rubric: expectNonEmptyString(record['rubric'], `${path}.rubric`) }
-}
-
 export function parseBenchmarkSpec(value: unknown, path: string): BenchmarkSpec {
 	const record = expectRecord(value, path)
 	rejectUnknownKeys(record, SPEC_KEYS, path)
@@ -60,7 +52,6 @@ export function parseBenchmarkSpec(value: unknown, path: string): BenchmarkSpec 
 		difficulty,
 		task: expectNonEmptyString(record['task'], `${path}.task`),
 		validation: parseValidation(record['validation'], `${path}.validation`),
-		...(record['judge'] !== undefined ? { judge: parseJudge(record['judge'], `${path}.judge`) } : {}),
 	}
 }
 
@@ -68,19 +59,8 @@ export function parseSuiteConfig(value: unknown, path: string): SuiteConfig {
 	const record = expectRecord(value, path)
 	rejectUnknownKeys(record, SUITE_KEYS, path)
 
-	let judge: JudgeConfig | undefined
-	if (record['judge'] !== undefined) {
-		const judgeRecord = expectRecord(record['judge'], `${path}.judge`)
-		rejectUnknownKeys(judgeRecord, SUITE_JUDGE_KEYS, `${path}.judge`)
-		judge = {
-			provider: expectNonEmptyString(judgeRecord['provider'], `${path}.judge.provider`),
-			model: expectNonEmptyString(judgeRecord['model'], `${path}.judge.model`),
-		}
-	}
-
 	return {
 		optimization: expectStringArray(record['optimization'], `${path}.optimization`),
 		heldOut: expectStringArray(record['heldOut'], `${path}.heldOut`),
-		...(judge !== undefined ? { judge } : {}),
 	}
 }

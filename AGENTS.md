@@ -243,7 +243,7 @@ loom/
     ├── guards.ts      the canonical isRecord guard
     ├── redact.ts      secret redaction for everything a run writes
     ├── agent/         the agent loop and its result types
-    ├── bench/         benchmark specs, the suite runner, validation, scoring, the judge
+    ├── bench/         benchmark specs, the suite runner, validation, scoring
     ├── blueprint/     types, parsers, loader
     ├── deployment/    providers, model prices, cost accounting
     ├── model/         provider interface, fake, openai client, router

@@ -101,7 +101,7 @@ Details: [blueprint-format.md](blueprint-format.md), [model-routing.md](model-ro
 | Git | none (only `.git/info/exclude`) | branch + commit + diff + merge + rollback per run |
 | Models | one model for all roles, no override | per-role routing profiles, per-run overrides |
 | Cost | token counts only | dollar accounting + hard budgets |
-| Evaluation | 9 toy benchmarks, pass/fail | real tasks, judge, variance, held-out split |
+| Evaluation | 9 toy benchmarks, pass/fail | real tasks, variance, held-out split |
 | Tuner | designed, unbuilt | built after the bench earns it |
 | Safety | container-only, model trusted | permission modes, approval gates, sandbox, egress |
 

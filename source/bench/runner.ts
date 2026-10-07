@@ -13,7 +13,6 @@
 import * as path from 'node:path'
 import type { ResultStatus } from '../agent/types.ts'
 import type { OpResult } from '../result.ts'
-import type { JudgeRequest } from './judge.ts'
 import type { LoadedSuite } from './load.ts'
 import { selectSplit } from './load.ts'
 import { aggregate, summarize } from './score.ts'
@@ -47,8 +46,6 @@ export interface SuiteRunnerDependencies {
 	readonly sandbox: BenchmarkSandbox
 	readonly runTask: BenchmarkTaskRunner
 	readonly runValidation: (workspaceRoot: string, spec: ValidationSpec) => ValidationObservation
-	/** Null when the suite configures no judge. */
-	readonly judge: ((request: JudgeRequest) => Promise<OpResult<number>>) | null
 	readonly now: () => number
 	/** Progress, one line per completed run. */
 	readonly onOutcome?: (outcome: BenchmarkOutcome) => void
@@ -136,42 +133,10 @@ async function runOnce(
 		const observation = dependencies.runValidation(workspace, spec.validation)
 		const evaluated = evaluateValidation(spec.validation, observation)
 
-		// The command is the contract. A judge grades quality *above* that gate —
-		// it may demote work that passes the tests but is poor, and it can never
-		// rescue work whose tests fail.
+		// The command is the contract. There is no layer above it: a run whose
+		// checks fail is a failure, and a run whose checks pass is a pass.
 		if (evaluated.status === 'fail') {
 			return outcome(spec.id, repetition, 'fail', 0, evaluated.reasons, run.runId, run.costUsd, wallTimeSeconds)
-		}
-
-		if (spec.judge !== undefined && dependencies.judge !== null) {
-			const judged = await dependencies.judge({
-				task: spec.task,
-				rubric: spec.judge.rubric,
-				evidence: describeEvidence(spec, observation, evaluated.reasons),
-			})
-			if (judged.kind === 'ok') {
-				return outcome(
-					spec.id,
-					repetition,
-					judged.value > 0 ? 'pass' : 'fail',
-					judged.value,
-					[],
-					run.runId,
-					run.costUsd,
-					wallTimeSeconds,
-				)
-			}
-			// A judge that cannot be reached must not silently zero a passing run.
-			return outcome(
-				spec.id,
-				repetition,
-				'pass',
-				1,
-				[`the judge could not score this run: ${judged.message}`],
-				run.runId,
-				run.costUsd,
-				wallTimeSeconds,
-			)
 		}
 
 		return outcome(spec.id, repetition, 'pass', 1, [], run.runId, run.costUsd, wallTimeSeconds)
@@ -186,7 +151,7 @@ function outcome(
 	benchmark: string,
 	repetition: number,
 	status: BenchmarkOutcome['status'],
-	score: number,
+	score: 0 | 1,
 	reasons: readonly string[],
 	runId: string | null,
 	costUsd: number,
@@ -199,11 +164,3 @@ function elapsedSeconds(dependencies: SuiteRunnerDependencies, startedAt: number
 	return (dependencies.now() - startedAt) / 1000
 }
 
-function describeEvidence(spec: BenchmarkSpec, observation: ValidationObservation, reasons: readonly string[]): string {
-	return [
-		`command: ${spec.validation.command}`,
-		`exit code: ${observation.exitCode === null ? 'none' : String(observation.exitCode)}`,
-		`stdout:\n${observation.stdout}`,
-		`checks that failed:\n${reasons.join('\n')}`,
-	].join('\n\n')
-}
