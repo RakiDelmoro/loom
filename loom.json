@@ -90,14 +90,16 @@
 	],
 	"routing": {
 		"reasoner": {
-			"provider": "together",
-			"model": "deepseek-ai/DeepSeek-V4.1-Flash",
-			"temperature": 0.2
+			"provider": "local",
+			"model": "qwen3.5-9b-heretic-v2",
+			"temperature": 0.2,
+			"maxTokens": 1024
 		},
 		"worker": {
-			"provider": "together",
-			"model": "deepseek-ai/DeepSeek-V4.1-Flash",
-			"temperature": 0.1
+			"provider": "local",
+			"model": "qwen3.5-9b-heretic-v2",
+			"temperature": 0.1,
+			"maxTokens": 1024
 		}
 	},
 	"budgets": {

@@ -1,5 +1,8 @@
 {
 	"providers": {
+		"local": {
+			"baseUrl": "http://127.0.0.1:8080/v1"
+		},
 		"together": {
 			"baseUrl": "https://api.together.ai/v1",
 			"apiKeyEnv": "TOGETHER_API_KEY"
@@ -7,6 +10,8 @@
 	},
 
 	"prices": {
+		"qwen3.5-9b-heretic-v2": { "inputPer1M": 0, "cachedInputPer1M": 0, "outputPer1M": 0 },
+
 		"deepseek-ai/DeepSeek-V4.1-Flash": { "inputPer1M": 0.3, "cachedInputPer1M": 0.006, "outputPer1M": 1.2 },
 		"deepseek-ai/DeepSeek-V4-Flash-0731": { "inputPer1M": 0.14, "cachedInputPer1M": 0.03, "outputPer1M": 0.28 },
 		"zai-org/GLM-5.3-Flash": { "inputPer1M": 0.15, "cachedInputPer1M": 0.03, "outputPer1M": 0.5 },
