@@ -1,0 +1,11 @@
+{
+	"id": "fix_tie_order",
+	"taskType": "bugfix",
+	"difficulty": "medium",
+	"task": "src/rank.test.ts fails. Higher scores come first as expected, but rows with the same score come out in whatever order they happened to arrive in. src/rank.test.ts pins the order they must come out in instead. Fix src/rank.ts. Do not change the tests.",
+	"validation": {
+		"command": "bun test",
+		"expectedExitCode": 0,
+		"expectedFiles": ["src/rank.ts"]
+	}
+}

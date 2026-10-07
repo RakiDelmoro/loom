@@ -1,0 +1,11 @@
+{
+	"id": "fix_error_swallowing",
+	"taskType": "bugfix",
+	"difficulty": "hard",
+	"task": "src/batch.test.ts fails. A batch in which one job throws loses the jobs after it, and the failure is never reported. A job that fails must be named, the jobs after it must still run, and the exception must not reach the caller. src/batch.test.ts states the exact shape expected. Do not change the tests.",
+	"validation": {
+		"command": "bun test",
+		"expectedExitCode": 0,
+		"expectedFiles": ["src/batch.ts"]
+	}
+}

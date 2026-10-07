@@ -1,0 +1,11 @@
+{
+	"id": "fix_shared_mutation",
+	"taskType": "bugfix",
+	"difficulty": "medium",
+	"task": "The tests in src/tags.test.ts and src/publish.test.ts fail. A call that starts from the default tags comes out wrong — it carries tags that an earlier call added. The same helper is reached through more than one entry point. Fix the cause everywhere it occurs. Do not change the tests.",
+	"validation": {
+		"command": "bun test",
+		"expectedExitCode": 0,
+		"expectedFiles": ["src/tags.ts", "src/publish.ts"]
+	}
+}

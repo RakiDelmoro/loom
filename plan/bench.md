@@ -39,13 +39,18 @@ benchmarks/
 ```jsonc
 // benchmarks/suite.json — every benchmark belongs to exactly one split
 {
-  "optimization": ["fix_off_by_one", "fix_import_path", "implement_clamp", "add_default_parameter"],
-  "heldOut": ["fix_string_case", "add_export"],
+  "optimization": [
+    "fix_off_by_one", "fix_import_path", "implement_clamp", "add_default_parameter",
+    "fix_shared_mutation", "fix_error_swallowing", "implement_retry_budget"
+  ],
+  "heldOut": ["fix_string_case", "add_export", "fix_tie_order"],
   "judge": { "provider": "together", "model": "deepseek-ai/DeepSeek-V4.1-Flash" }  // optional
 }
 ```
 
 `spec.json` is deliberately **not** copied into the workspace: the agent must not be able to read the test it is graded against.
+
+**A suite must be able to discriminate, or it measures nothing.** Six `easy` single-function tasks pass every time, and a benchmark that always passes cannot tell a good Blueprint from a bad one — nor can a Tuner promote anything against it, since a promotion needs a candidate to clear the baseline. The suite therefore carries tasks across `easy`, `medium`, and `hard`: multi-file fixes where the bug has more than one site, contracts the tests state and the source must be read to satisfy, and edge cases (an exhausted budget, a tie order, a failure that must be reported *and* survived).
 
 ---
 

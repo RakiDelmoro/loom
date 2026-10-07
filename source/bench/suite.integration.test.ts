@@ -74,6 +74,86 @@ export function slug(title: string): string {
 }
 `,
 	},
+	{
+		match: 'carries tags that an earlier call added',
+		path: 'src/tags.ts',
+		content: `/** The tags a new item carries before anyone adds to them. */
+export const DEFAULT_TAGS = ['draft']
+
+/** Adds a tag to a list. With no list, the default tags are used. */
+export function withTag(tags: string[] = DEFAULT_TAGS, tag: string): string[] {
+	return [...tags, tag]
+}
+`,
+	},
+	{
+		match: 'carries tags that an earlier call added',
+		path: 'src/publish.ts',
+		content: `import { DEFAULT_TAGS } from './tags.ts'
+
+/** The tags a publish carries, plus \`published\`. With no list, the defaults are used. */
+export function publishTags(extra: string[] = DEFAULT_TAGS): string[] {
+	return [...extra, 'published']
+}
+`,
+	},
+	{
+		match: 'loses the jobs after it',
+		path: 'src/batch.ts',
+		content: `export interface Job {
+	readonly name: string
+	readonly run: () => string
+}
+
+export interface BatchReport {
+	readonly results: readonly string[]
+	readonly failures: readonly string[]
+}
+
+/** Runs every job and collects what happened. */
+export function runAll(jobs: readonly Job[]): BatchReport {
+	const results: string[] = []
+	const failures: string[] = []
+	for (const job of jobs) {
+		try {
+			results.push(job.run())
+		} catch (error) {
+			failures.push(\`\${job.name}: \${error instanceof Error ? error.message : String(error)}\`)
+		}
+	}
+	return { results, failures }
+}
+`,
+	},
+	{
+		match: 'never charges the budget',
+		path: 'src/budget.ts',
+		content: `export interface Budget {
+	remaining: number
+}
+
+/** Runs an operation against a budget. Every call costs one unit. */
+export function spend<T>(budget: Budget, operation: () => T): T {
+	if (budget.remaining <= 0) throw new Error('the budget is exhausted')
+	budget.remaining -= 1
+	return operation()
+}
+`,
+	},
+	{
+		match: 'whatever order they happened to arrive in',
+		path: 'src/rank.ts',
+		content: `export interface Row {
+	readonly name: string
+	readonly score: number
+}
+
+/** Orders rows by score, highest first. Rows with the same score keep a predictable order. */
+export function rank(rows: readonly Row[]): Row[] {
+	return [...rows].sort((left, right) => right.score - left.score || left.name.localeCompare(right.name))
+}
+`,
+	},
 ]
 
 function readMessages(body: unknown): Array<{ readonly role: string; readonly content: string }> {
@@ -98,13 +178,17 @@ function createSolver() {
 			const hasToolResult = messages.some((message) => message.role === 'tool')
 			const task = messages.find((message) => message.role === 'user')?.content ?? ''
 
-			const toolCall = (name: string, args: unknown) => ({
+			const toolCall = (calls: ReadonlyArray<{ readonly name: string; readonly args: unknown }>) => ({
 				choices: [
 					{
 						message: {
 							role: 'assistant',
 							content: '',
-							tool_calls: [{ id: 'c1', type: 'function', function: { name, arguments: JSON.stringify(args) } }],
+							tool_calls: calls.map((entry, index) => ({
+								id: `c${String(index)}`,
+								type: 'function',
+								function: { name: entry.name, arguments: JSON.stringify(entry.args) },
+							})),
 						},
 						finish_reason: 'tool_calls',
 					},
@@ -112,13 +196,20 @@ function createSolver() {
 				usage: { prompt_tokens: 10, completion_tokens: 5 },
 			})
 
-			if (hasToolResult) return Response.json(toolCall('finish', { status: 'success', summary: 'applied the fix' }))
-
-			const fix = FIXES.find((entry) => task.includes(entry.match))
-			if (fix === undefined) {
-				return Response.json(toolCall('finish', { status: 'error', summary: 'no fix known for this task' }))
+			if (hasToolResult) {
+				return Response.json(toolCall([{ name: 'finish', args: { status: 'success', summary: 'applied the fix' } }]))
 			}
-			return Response.json(toolCall('write_file', { path: fix.path, content: fix.content }))
+
+			// A benchmark may need more than one file changed, so every fix whose
+			// phrase appears in the task is written — in one turn, as a real model
+			// would batch them.
+			const fixes = FIXES.filter((entry) => task.includes(entry.match))
+			if (fixes.length === 0) {
+				return Response.json(toolCall([{ name: 'finish', args: { status: 'error', summary: 'no fix known for this task' } }]))
+			}
+			return Response.json(
+				toolCall(fixes.map((fix) => ({ name: 'write_file', args: { path: fix.path, content: fix.content } }))),
+			)
 		},
 	})
 	return { server, baseUrl: `http://localhost:${String(server.port)}/v1` }
@@ -188,11 +279,11 @@ suite('the bench against real git and a stub model', () => {
 				fetch: (url, init) => fetch(url, init),
 			})
 
-			// The suite's four optimization benchmarks all pass with a working Blueprint.
-			expect(result.benchmarks).toHaveLength(4)
+			// Every optimization benchmark passes with a working Blueprint.
+			expect(result.benchmarks).toHaveLength(7)
 			expect(result.score).toBe(1)
 
-			// 4 of 4 is not certainty, and the interval says so.
+			// 7 of 7 is not certainty, and the interval says so.
 			expect(result.interval.low).toBeLessThan(0.9)
 			expect(result.interval.high).toBe(1)
 
@@ -200,6 +291,7 @@ suite('the bench against real git and a stub model', () => {
 			const serialized = JSON.stringify(result)
 			expect(serialized).not.toContain('fix_string_case')
 			expect(serialized).not.toContain('add_export')
+			expect(serialized).not.toContain('fix_tie_order')
 
 			// The result is persisted, for regression tracking.
 			expect(readdirSync(path.join(config, 'results'))).toHaveLength(1)
@@ -225,7 +317,11 @@ suite('the bench against real git and a stub model', () => {
 				fetch: (url, init) => fetch(url, init),
 			})
 
-			expect(result.benchmarks.map((summary) => summary.benchmark)).toEqual(['fix_string_case', 'add_export'])
+			expect(result.benchmarks.map((summary) => summary.benchmark)).toEqual([
+				'fix_string_case',
+				'add_export',
+				'fix_tie_order',
+			])
 			expect(result.score).toBe(1)
 		} finally {
 			solver.server.stop(true)

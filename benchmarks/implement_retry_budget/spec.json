@@ -1,0 +1,11 @@
+{
+	"id": "implement_retry_budget",
+	"taskType": "feature",
+	"difficulty": "hard",
+	"task": "src/budget.ts is a stub: it runs the operation but never charges the budget and never refuses. src/budget.test.ts states the contract it must satisfy, including what happens when the budget is empty and what a failed operation costs. Implement spend to that contract. Do not change the tests.",
+	"validation": {
+		"command": "bun test",
+		"expectedExitCode": 0,
+		"expectedFiles": ["src/budget.ts"]
+	}
+}

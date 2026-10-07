@@ -3,10 +3,10 @@
 		"fix_off_by_one",
 		"fix_import_path",
 		"implement_clamp",
-		"add_default_parameter"
+		"add_default_parameter",
+		"fix_shared_mutation",
+		"fix_error_swallowing",
+		"implement_retry_budget"
 	],
-	"heldOut": [
-		"fix_string_case",
-		"add_export"
-	]
+	"heldOut": ["fix_string_case", "add_export", "fix_tie_order"]
 }
