@@ -77,6 +77,7 @@ function createHarness(options: {
 		},
 		propose: async (_context: ProposalContext) => ok(options.hypotheses),
 		pricedModels: [],
+		providers: [],
 		merge: options.merge ?? (async () => ok([])),
 		now: () => 1_700_000_000_000,
 	}
@@ -260,6 +261,7 @@ describe('runTuner', () => {
 				evaluate: async () => createSuiteResult({ score: 0.5 }),
 				propose: async () => ({ kind: 'failed', message: 'the model was unavailable' }),
 				pricedModels: [],
+				providers: [],
 				merge: async () => ok([]),
 				now: () => 0,
 			},

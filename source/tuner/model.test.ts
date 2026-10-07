@@ -17,6 +17,7 @@ const PROPOSAL = {
 	blueprint: '{"entryRole": "orchestrator"}',
 	failingBenchmarks: [],
 	pricedModels: [],
+	providers: [],
 	editableFiles: ['loom.json'],
 }
 
@@ -64,6 +65,7 @@ describe('the hypothesis proposer', () => {
 			blueprint: '{}',
 			failingBenchmarks: [],
 			pricedModels: [],
+			providers: [],
 			editableFiles: ['loom.json', 'prompts/coder.md'],
 		})
 
@@ -81,10 +83,29 @@ describe('the hypothesis proposer', () => {
 			failingBenchmarks: [],
 			editableFiles: [],
 			pricedModels: ['cheap-model — $0.1 in / $0.2 out per 1M'],
+			providers: [],
 		})
 
 		const sent = provider.calls[0]?.messages.find((message) => message.role === 'user')?.content ?? ''
 		expect(sent).toContain('cheap-model — $0.1 in / $0.2 out per 1M')
+	})
+
+	test('the request names the providers, not only the models', async () => {
+		// A routing profile is a {provider, model} pair and the price table is a flat
+		// list, so models without providers invite a pairing nothing serves.
+		const provider = createFakeProvider([textResponse('not json')])
+		const propose = createHypothesisProposer({ provider, model: 'big' })
+		await propose({
+			blueprint: '{}',
+			failingBenchmarks: [],
+			editableFiles: [],
+			providers: ['local', 'together'],
+			pricedModels: [],
+		})
+
+		const sent = provider.calls[0]?.messages.find((message) => message.role === 'user')?.content ?? ''
+		expect(sent).toContain('local')
+		expect(sent).toContain('together')
 	})
 
 	test('a fenced JSON reply is accepted', async () => {

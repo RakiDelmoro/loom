@@ -33,6 +33,13 @@ export interface ProposalContext {
 	 */
 	readonly editableFiles: readonly string[]
 	/**
+	 * The providers the deployment declares. A routing profile is a
+	 * `{provider, model}` pair, and the price table is a flat list of models — so
+	 * without this a proposer can pair a model with a provider that does not serve
+	 * it, and only finds out when the candidate fails every benchmark.
+	 */
+	readonly providers: readonly string[]
+	/**
 	 * The models the deployment prices, with what each costs.
 	 *
 	 * A proposer asked to make a run cheaper cannot name a cheaper model it has
@@ -60,6 +67,8 @@ export interface TunerDependencies {
 	readonly propose: (context: ProposalContext) => Promise<OpResult<readonly Hypothesis[]>>
 	/** `model — $in/$out per 1M`, for the proposer. Empty when the deployment prices nothing. */
 	readonly pricedModels: readonly string[]
+	/** The provider names the deployment declares. */
+	readonly providers: readonly string[]
 	readonly merge: (context: MergeContext) => Promise<OpResult<readonly BlueprintChange[]>>
 	readonly now: () => number
 	readonly onEvent?: (message: string) => void
@@ -121,6 +130,7 @@ async function runCycle(
 	const proposed = await dependencies.propose({
 		blueprint: blueprintText,
 		editableFiles: readBlueprintFiles(dependencies.fs, config.guildPath),
+		providers: dependencies.providers,
 		pricedModels: dependencies.pricedModels,
 		failingBenchmarks: baseline.benchmarks
 			.filter((summary) => summary.passRate < 1)

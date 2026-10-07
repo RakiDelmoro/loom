@@ -78,9 +78,11 @@ function renderProposalRequest(context: ProposalContext): string {
 	const catalog =
 		context.pricedModels.length === 0
 			? ''
-			: `\n\nModels this deployment prices, which are the only ones a change may name:\n${context.pricedModels
+			: `\n\nThe deployment declares these providers:\n${context.providers
+					.map((name) => `- ${name}`)
+					.join('\n')}\n\nand prices these models, which are the only ones a routing change may name:\n${context.pricedModels
 					.map((line) => `- ${line}`)
-					.join('\n')}`
+					.join('\n')}\n\nA routing profile is a provider and a model together, and the deployment is what knows which provider serves which model. Prefer a pair you have seen working in the Blueprint above.`
 
 	const editable =
 		context.editableFiles.length === 0
