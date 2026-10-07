@@ -221,6 +221,7 @@ Examples: everything in `source/blueprint/parse.ts`, `parseChatCompletion` in
 loom/
 ├── loom.json          the example Blueprint
 ├── loom.deployment.json  the example deployment (providers and model prices)
+├── benchmarks/        the benchmark suite: suite.json + one directory per task
 ├── tools/             tool manifests referenced by the Blueprint
 ├── prompts/           role system prompts referenced by the Blueprint
 ├── plan/              the design and roadmap (documents, not code)
@@ -228,6 +229,7 @@ loom/
     ├── cli.ts         the `loom` command (glue)
     ├── cli-args.ts    command-line argument parsing
     ├── run-task.ts    the composition root for one run
+    ├── run-bench.ts   the composition root for a suite run
     ├── errors.ts      ValidationError, describeError
     ├── result.ts      OpResult — the outcome of a fallible operation
     ├── validation.ts  the shared validation vocabulary (expect*, rejectUnknownKeys)
@@ -235,6 +237,7 @@ loom/
     ├── node-fs.ts     the real filesystem leaf
     ├── guards.ts      the canonical isRecord guard
     ├── agent/         the agent loop and its result types
+    ├── bench/         benchmark specs, the suite runner, validation, scoring, the judge
     ├── blueprint/     types, parsers, loader
     ├── deployment/    providers, model prices, cost accounting
     ├── model/         provider interface, fake, openai client, router

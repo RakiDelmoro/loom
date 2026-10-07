@@ -63,6 +63,9 @@ export function createMemoryFileSystem(
 			isDirectory(dirPath: string): boolean {
 				return directories.has(dirPath)
 			},
+			exists(filePath: string): boolean {
+				return files.has(filePath) || directories.has(filePath)
+			},
 			ensureDirectory(dirPath: string): void {
 				directories.add(dirPath)
 			},

@@ -1,0 +1,93 @@
+/**
+ * What a benchmark is, and what running one produces.
+ *
+ * A benchmark is a self-contained task: an initial workspace, a plain-language
+ * task, and a machine-checkable definition of done. Its spec is never copied
+ * into the workspace — the candidate must not be able to read the test it is
+ * graded against.
+ */
+
+export type Split = 'optimization' | 'held-out'
+
+export type Difficulty = 'easy' | 'medium' | 'hard'
+
+export interface ValidationSpec {
+	/** A shell command run in the finished workspace. */
+	readonly command: string
+	readonly expectedExitCode: number
+	/** Files that must exist when the run is over. */
+	readonly expectedFiles: readonly string[]
+	/** Substrings that must appear in the command's stdout. */
+	readonly expectedStdoutContains: readonly string[]
+	readonly timeoutSeconds: number
+}
+
+/** A rubric for work that is not binary — a refactor, a design, a document. */
+export interface JudgeSpec {
+	readonly rubric: string
+}
+
+export interface BenchmarkSpec {
+	readonly id: string
+	readonly taskType: string
+	readonly difficulty: Difficulty
+	/** The text handed to the entry role. */
+	readonly task: string
+	readonly validation: ValidationSpec
+	readonly judge?: JudgeSpec
+}
+
+/** Which model grades work that is not binary. Optional: a suite may have none. */
+export interface JudgeConfig {
+	readonly provider: string
+	readonly model: string
+}
+
+/** Which benchmarks the optimizer may see, and which it never may. */
+export interface SuiteConfig {
+	readonly optimization: readonly string[]
+	readonly heldOut: readonly string[]
+	readonly judge?: JudgeConfig
+}
+
+export type OutcomeStatus = 'pass' | 'fail' | 'error'
+
+/** One benchmark, run once. */
+export interface BenchmarkOutcome {
+	readonly benchmark: string
+	readonly repetition: number
+	readonly status: OutcomeStatus
+	/** 1 for a deterministic pass, the normalized judge score, or 0. */
+	readonly score: number
+	readonly reasons: readonly string[]
+	readonly runId: string | null
+	readonly costUsd: number
+	readonly wallTimeSeconds: number
+}
+
+/** One benchmark, aggregated over its repetitions. */
+export interface BenchmarkSummary {
+	readonly benchmark: string
+	readonly split: Split
+	readonly passes: number
+	readonly runs: number
+	readonly passRate: number
+	readonly costUsd: number
+}
+
+export interface SuiteResult {
+	readonly suitePath: string
+	readonly blueprintPath: string
+	readonly split: Split
+	readonly repetitions: number
+	readonly startedAt: string
+	readonly finishedAt: string
+	readonly benchmarks: readonly BenchmarkSummary[]
+	readonly outcomes: readonly BenchmarkOutcome[]
+	/** The mean score across every run in the split. */
+	readonly score: number
+	/** A 95% Wilson interval over those runs. A smaller gap is not an improvement. */
+	readonly interval: { readonly low: number; readonly high: number }
+	readonly costUsd: number
+	readonly wallTimeSeconds: number
+}

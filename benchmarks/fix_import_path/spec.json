@@ -1,0 +1,13 @@
+{
+	"id": "fix_import_path",
+	"taskType": "bugfix",
+	"difficulty": "easy",
+	"task": "src/format.ts imports './helper.ts', which does not exist, so src/format.test.ts fails to load. Fix the import so the test passes. Do not change the test.",
+	"validation": {
+		"command": "bun test",
+		"expectedExitCode": 0,
+		"expectedFiles": [
+			"src/format.ts"
+		]
+	}
+}

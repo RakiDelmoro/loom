@@ -14,6 +14,8 @@ import { parseArguments, parseModelOverrides, type ParsedArguments } from './cli
 import { ValidationError } from './errors.ts'
 import { createNodeFileSystem } from './node-fs.ts'
 import { runTask } from './run-task.ts'
+import { runBench } from './run-bench.ts'
+import type { Split, SuiteResult } from './bench/types.ts'
 import { createRunLifecycle } from './runs/lifecycle.ts'
 import { createRunStore } from './runs/store.ts'
 import type { AutonomyLevel, RunManifest } from './runs/types.ts'
@@ -39,6 +41,7 @@ Usage:
   loom merge  <runId> --agent <id> [--repo <path>]
   loom undo   <runId> [--repo <path>]
   loom clean  <runId> [--branches] [--repo <path>]
+  loom bench --suite <dir> [--split <optimization|held-out>] [--repetitions <n>]
 
 Commands:
   blueprint validate   Validate a Blueprint and every tool manifest it names.
@@ -49,6 +52,7 @@ Commands:
   merge                Apply one agent's branch to the base branch.
   undo                 Return the base branch to the commit the run started from.
   clean                Remove a run's worktrees, and its branches with --branches.
+  bench                Score a Blueprint against a benchmark suite.
 
 Files:
   loom.json            The Blueprint: roles, tools, routing, budgets, alerts.
@@ -269,6 +273,62 @@ function cleanCommand(args: ParsedArguments): number {
 	return 0
 }
 
+function parseSplit(value: string): Split | null {
+	if (value === 'optimization' || value === 'held-out') return value
+	return null
+}
+
+function formatSuiteResult(result: SuiteResult): string {
+	const percent = (value: number): string => `${(value * 100).toFixed(1)}%`
+	const lines = [
+		`suite:     ${result.suitePath}`,
+		`split:     ${result.split} (${String(result.benchmarks.length)} benchmark(s) x ${String(result.repetitions)} repetition(s))`,
+		`blueprint: ${result.blueprintPath}`,
+		`score:     ${percent(result.score)}  [${percent(result.interval.low)}, ${percent(result.interval.high)}]`,
+		`cost:      $${result.costUsd.toFixed(4)}`,
+		`time:      ${result.wallTimeSeconds.toFixed(1)}s`,
+		'',
+		'benchmarks:',
+	]
+	for (const summary of result.benchmarks) {
+		lines.push(`  ${summary.benchmark.padEnd(28)} ${String(summary.passes)}/${String(summary.runs)}  $${summary.costUsd.toFixed(4)}`)
+	}
+	for (const outcome of result.outcomes) {
+		if (outcome.status === 'pass') continue
+		lines.push(`  ${outcome.benchmark} #${String(outcome.repetition)} ${outcome.status}: ${outcome.reasons.join('; ')}`)
+	}
+	return `${lines.join('\n')}\n`
+}
+
+async function benchCommand(args: ParsedArguments): Promise<number> {
+	const repoPath = resolveRepoPath(args)
+	const split = parseSplit(args.flags['split'] ?? 'optimization')
+	if (split === null) return fail('loom bench: --split must be optimization or held-out')
+
+	const repetitions = Number(args.flags['repetitions'] ?? '1')
+	if (!Number.isInteger(repetitions) || repetitions <= 0) {
+		return fail('loom bench: --repetitions must be a positive integer')
+	}
+
+	const suiteFlag = args.flags['suite']
+	const result = await runBench({
+		suitePath: path.resolve(suiteFlag === undefined || suiteFlag === '' ? 'benchmarks' : suiteFlag),
+		split,
+		blueprintPath: resolveFileFlag(args.flags['blueprint'], repoPath, 'loom.json'),
+		deploymentPath: resolveFileFlag(args.flags['deployment'], repoPath, 'loom.deployment.json'),
+		repetitions,
+		resultsDirectory: path.join(repoPath, '.loom', 'bench'),
+		env: process.env,
+		fetch: (url, init) => fetch(url, init),
+		onOutcome: (outcome) => {
+			process.stderr.write(`  ${outcome.benchmark} #${String(outcome.repetition)} ${outcome.status}\n`)
+		},
+	})
+
+	process.stdout.write(formatSuiteResult(result))
+	return 0
+}
+
 async function main(argv: readonly string[]): Promise<number> {
 	const command = argv[0]
 
@@ -301,6 +361,8 @@ async function main(argv: readonly string[]): Promise<number> {
 			return undoCommand(args)
 		case 'clean':
 			return cleanCommand(args)
+		case 'bench':
+			return benchCommand(args)
 		default:
 			process.stderr.write(`loom: unknown command "${command}"\n\n${USAGE}`)
 			return 2

@@ -1,0 +1,13 @@
+{
+	"id": "add_default_parameter",
+	"taskType": "bugfix",
+	"difficulty": "easy",
+	"task": "src/greet.test.ts calls greet with one argument, but greet requires two. Give the `greeting` parameter a default of \"Hello\" so both tests pass. Do not change the tests.",
+	"validation": {
+		"command": "bun test",
+		"expectedExitCode": 0,
+		"expectedFiles": [
+			"src/greet.ts"
+		]
+	}
+}

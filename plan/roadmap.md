@@ -114,17 +114,17 @@ Milestones are sequential: the isolation primitive must exist before the engine 
 
 **Deliverables.**
 
-1. **Benchmark format** — initial workspace, task text, validation spec, optional judge rubric, optional scripted human answers.
-2. **Runner** — each benchmark in its own isolated worktree/container, `repetitionsPerBenchmark` repetitions, deterministic validation plus an LLM judge for non-binary tasks.
-3. **Scoring** — pass rate with confidence bounds, plus cost and latency terms.
-4. **Regression tracking** — results persisted per run; a held-out split the tuner can never read.
+1. **Benchmark format** — a self-contained task: an initial `workspace/`, a plain-language task, and a machine-checkable definition of done. The spec is never copied into the workspace.
+2. **Runner** — each benchmark in its own throwaway repository, `--repetitions` repetitions, deterministic validation first and an optional LLM judge above it. Teardown on every exit path.
+3. **Scoring** — the mean score with a 95% Wilson interval; cost and latency reported alongside rather than folded into it.
+4. **Regression tracking** — results persisted to `<repo>/.loom/bench/<timestamp>.json`; a held-out split the tuner can never run.
 
 **Acceptance criteria.**
 
-- [ ] A suite of ≥5 real tasks runs end-to-end and emits a reproducible score.
-- [ ] A deliberately degraded Blueprint scores measurably lower than the baseline.
-- [ ] Scores include confidence bounds and are stable across repetitions.
-- [ ] The held-out split is enforced structurally, not by convention.
+- [x] A suite of ≥5 real tasks runs end-to-end and emits a reproducible score.
+- [x] A deliberately degraded Blueprint scores measurably lower, with non-overlapping intervals.
+- [x] Scores include confidence bounds and are stable across repetitions.
+- [x] The held-out split is enforced structurally: `suite.json` must partition the benchmarks, and an optimization run never executes the held-out half.
 
 ---
 

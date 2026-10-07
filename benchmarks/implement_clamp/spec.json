@@ -1,0 +1,13 @@
+{
+	"id": "implement_clamp",
+	"taskType": "feature",
+	"difficulty": "easy",
+	"task": "src/clamp.ts returns its argument unchanged, so the tests in src/clamp.test.ts fail. Implement clamp so a value is restricted to the inclusive range [min, max]. Do not change the tests.",
+	"validation": {
+		"command": "bun test",
+		"expectedExitCode": 0,
+		"expectedFiles": [
+			"src/clamp.ts"
+		]
+	}
+}

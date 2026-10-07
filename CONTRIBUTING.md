@@ -32,6 +32,7 @@ and `typescript`, and that is deliberate — see "No dependencies" in
 ```bash
 bun run loom --version
 bun run loom blueprint validate loom.json
+bun run loom bench --suite benchmarks --split optimization --repetitions 2
 ```
 
 Validating the shipped Blueprint is the smoke test for the Blueprint layer:
@@ -55,6 +56,7 @@ loom.deployment.json  providers, endpoints, and model prices; credentials are
                named here and read from the environment, never stored
 tools/         tool manifests, referenced by path from the Blueprint
 prompts/       role system prompts, referenced by path from the Blueprint
+benchmarks/    the benchmark suite: suite.json + one directory per task
 plan/          the design documents and roadmap
 source/           the engine
 ```

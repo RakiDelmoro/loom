@@ -27,5 +27,6 @@ export interface FileSystem {
 	readonly appendTextFile: (filePath: string, text: string) => void
 	readonly listDirectory: (dirPath: string) => ListDirectoryResult
 	readonly isDirectory: (dirPath: string) => boolean
+	readonly exists: (filePath: string) => boolean
 	readonly ensureDirectory: (dirPath: string) => void
 }

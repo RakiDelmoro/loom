@@ -1,0 +1,13 @@
+{
+	"id": "add_export",
+	"taskType": "bugfix",
+	"difficulty": "easy",
+	"task": "src/stats.test.ts cannot import `total` from src/stats.ts. Export it so the tests pass. Do not change the tests.",
+	"validation": {
+		"command": "bun test",
+		"expectedExitCode": 0,
+		"expectedFiles": [
+			"src/stats.ts"
+		]
+	}
+}

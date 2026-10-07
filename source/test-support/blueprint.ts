@@ -1,3 +1,4 @@
+import { FINISH_TOOL } from '../agent/loop.ts'
 import type { Alerts, LoadedBlueprint, LoadedRole, RoutingProfile } from '../blueprint/types.ts'
 
 const DEFAULT_PROFILE: RoutingProfile = { provider: 'test', model: 'test-model', temperature: 0 }
@@ -28,14 +29,16 @@ export function createTestBlueprint(
 		loadedRoles[name] = {
 			prompt: 'prompt.md',
 			model: 'default',
-			tools: role.tools ?? [],
+			// Every role must be able to finish, or it can only be stopped by its
+			// turn limit — the same invariant the Blueprint validator enforces.
+			tools: [...new Set([...(role.tools ?? []), FINISH_TOOL])],
 			isolation: role.isolation ?? 'worktree',
 			maxChildren: role.maxChildren ?? 1,
 			systemPrompt: role.systemPrompt ?? `You are ${name}.`,
 		}
 	}
 
-	const declaredTools = new Set<string>()
+	const declaredTools = new Set<string>([FINISH_TOOL])
 	for (const role of Object.values(roles)) for (const tool of role.tools ?? []) declaredTools.add(tool)
 
 	return {

@@ -206,6 +206,12 @@ export function validateBlueprint(file: BlueprintFile, manifests: readonly ToolM
 		for (const [index, tool] of role.tools.entries()) {
 			if (!declaredTools.has(tool)) fail(`${path}.roles.${name}.tools[${index}]`, `tool "${tool}" is not declared in tools`)
 		}
+		// A role that cannot finish can only be stopped by its turn limit, which
+		// burns the whole run. The grant list is enforced at call time, so this
+		// has to be checked here rather than discovered later.
+		if (!role.tools.includes('finish')) {
+			fail(`${path}.roles.${name}.tools`, 'every role must be granted "finish"')
+		}
 	}
 
 	for (const [index, tool] of file.permissions.requireApproval.entries()) {

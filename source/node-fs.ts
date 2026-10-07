@@ -39,6 +39,9 @@ export function createNodeFileSystem(): FileSystem {
 		isDirectory(dirPath: string): boolean {
 			return statSync(dirPath, { throwIfNoEntry: false })?.isDirectory() ?? false
 		},
+		exists(filePath: string): boolean {
+			return existsSync(filePath)
+		},
 		ensureDirectory(dirPath: string): void {
 			mkdirSync(dirPath, { recursive: true })
 		},

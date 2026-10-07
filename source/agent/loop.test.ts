@@ -13,6 +13,7 @@ const request: AgentLoopRequest = {
 	task: 'do the thing',
 	profile: { provider: 'test', model: 'test-model', temperature: 0 },
 	toolSpecs: [],
+	allowedTools: ['echo', 'boom', 'ghost', 'agent', 'finish'],
 	workspaceRoot: '/repo',
 	maxTurns: 5,
 	maxChildren: 2,
@@ -102,6 +103,25 @@ describe('runAgentLoop', () => {
 
 		await runAgentLoop(dependencies(provider), request)
 		expect(lastToolMessage(second)).toContain('unknown_tool')
+	})
+
+	test('a tool the role was not granted is refused, even though the engine has it', async () => {
+		// `echo` is registered, but this role holds no grants — the capability
+		// model must hold against a model that calls an ungranted tool anyway.
+		const tools = createToolRegistry([{ name: 'echo', run: async () => ({ kind: 'success', data: 'ran' }) }])
+		let second: ChatRequest | undefined
+		const provider = createFakeProvider([
+			toolCallResponse([call('c1', 'echo', {})]),
+			(request) => {
+				second = request
+				return toolCallResponse([call('f', 'finish', { status: 'success', summary: 'ok' })])
+			},
+		])
+
+		await runAgentLoop(dependencies(provider, tools), { ...request, allowedTools: [] })
+
+		expect(lastToolMessage(second)).toContain('unknown_tool')
+		expect(lastToolMessage(second)).toContain('is available to this role')
 	})
 
 	test('a malformed finish is reported back so the model can correct it', async () => {

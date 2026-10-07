@@ -179,6 +179,7 @@ export function createScheduler(
 				task,
 				profile,
 				toolSpecs: toolSpecsFor(role),
+				allowedTools: role.tools,
 				workspaceRoot,
 				maxTurns: MAX_TURNS_PER_ROLE,
 				maxChildren: role.maxChildren,

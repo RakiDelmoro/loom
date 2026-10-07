@@ -1,0 +1,13 @@
+{
+	"id": "fix_string_case",
+	"taskType": "bugfix",
+	"difficulty": "easy",
+	"task": "src/slug.test.ts fails: slug should produce a lower-case, dash-separated form. Fix src/slug.ts. Do not change the tests.",
+	"validation": {
+		"command": "bun test",
+		"expectedExitCode": 0,
+		"expectedFiles": [
+			"src/slug.ts"
+		]
+	}
+}

@@ -32,13 +32,19 @@ function createRepositoryWithBlueprint(modelBaseUrl: string): string {
 		path.join(repo, 'tools', 'write_file.json'),
 		JSON.stringify({ name: 'write_file', description: 'Write a file.', parameters: { type: 'object' } }),
 	)
+	writeFileSync(
+		path.join(repo, 'tools', 'finish.json'),
+		JSON.stringify({ name: 'finish', description: 'End the role.', parameters: { type: 'object' } }),
+	)
 	writeFileSync(path.join(repo, 'prompts', 'orchestrator.md'), 'You are the orchestrator.\n')
 	writeFileSync(
 		path.join(repo, 'loom.json'),
 		JSON.stringify({
 			entryRole: 'orchestrator',
-			roles: { orchestrator: { prompt: 'prompts/orchestrator.md', model: 'default', tools: ['write_file'] } },
-			tools: ['tools/write_file.json'],
+			roles: {
+				orchestrator: { prompt: 'prompts/orchestrator.md', model: 'default', tools: ['write_file', 'finish'] },
+			},
+			tools: ['tools/write_file.json', 'tools/finish.json'],
 			routing: { default: { provider: 'stub', model: 'test-model', temperature: 0 } },
 			budgets: { maxAgentDepth: 2, maxConcurrentAgents: 2, toolTimeoutSeconds: 30 },
 			// A deliberately tiny threshold, so the alert fires on any real spend.

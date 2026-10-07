@@ -53,6 +53,8 @@ export interface AgentLoopRequest {
 	readonly task: string
 	readonly profile: RoutingProfile
 	readonly toolSpecs: readonly ToolSpec[]
+	/** The tool names this role may call. A call outside this list is refused. */
+	readonly allowedTools: readonly string[]
 	readonly workspaceRoot: string
 	readonly maxTurns: number
 	/** How many `agent` calls this role may have in flight at once. */
@@ -208,6 +210,19 @@ async function executeToolCall(
 	request: AgentLoopRequest,
 	call: ToolCall,
 ): Promise<ToolCallOutcome> {
+	// The grant list is the capability model: a role may call only what the
+	// Blueprint gave it, whatever the model asks for. Reviewer roles hold no
+	// mutating tools, and that has to hold against a model that calls one anyway.
+	if (!request.allowedTools.includes(call.name)) {
+		return {
+			serialized: JSON.stringify({
+				kind: 'unknown_tool',
+				message: `no tool named "${call.name}" is available to this role`,
+			}),
+			kind: 'unknown_tool',
+		}
+	}
+
 	if (call.name === AGENT_TOOL) {
 		const delegation = parseDelegation(call.arguments)
 		if (delegation.kind !== 'ok') {
