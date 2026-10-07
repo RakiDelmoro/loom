@@ -72,9 +72,36 @@ function summarize(agents: readonly AgentRecord[]): RunTotals {
 
 export function createRunRecorder(dependencies: RunRecorderDependencies, options: RunRecorderOptions): RunRecorder {
 	const startedAt = new Date(dependencies.now()).toISOString()
-	const agents: AgentRecord[] = []
+	/** Who spawned, in the order they were spawned. */
+	const spawnOrder: string[] = []
+	const spawned = new Set<string>()
+	const records = new Map<string, AgentRecord>()
+
+	function spawn(agentId: string): void {
+		if (spawned.has(agentId)) return
+		spawned.add(agentId)
+		spawnOrder.push(agentId)
+	}
+
+	/**
+	 * The manifest's agents, in **spawn order**.
+	 *
+	 * Ordering by finish is the obvious implementation and the wrong one: a child
+	 * finishes before the parent that delegated to it, so the run would list its
+	 * agents backwards. Spawn order is what a reader expects, and it is what the
+	 * manifest promises.
+	 */
+	function orderedAgents(): readonly AgentRecord[] {
+		const ordered: AgentRecord[] = []
+		for (const agentId of spawnOrder) {
+			const record = records.get(agentId)
+			if (record !== undefined) ordered.push(record)
+		}
+		return ordered
+	}
 
 	function persist(status: RunStatus, finishedAt: string | null): RunManifest {
+		const agents = orderedAgents()
 		const totals = summarize(agents)
 		const manifest: RunManifest = {
 			runId: options.runId,
@@ -101,9 +128,17 @@ export function createRunRecorder(dependencies: RunRecorderDependencies, options
 	return {
 		events(event: RunEvent): void {
 			dependencies.store.appendEvent(options.runId, event)
+
+			if (event.type === 'agent_start') {
+				spawn(event.agentId)
+				return
+			}
 			if (event.type !== 'agent_finish') return
 
-			agents.push({
+			// A finish with no matching start still belongs in the manifest: a log
+			// replayed from disk may not carry the spawn.
+			spawn(event.agentId)
+			records.set(event.agentId, {
 				agentId: event.agentId,
 				role: event.role,
 				parentId: event.parentId,

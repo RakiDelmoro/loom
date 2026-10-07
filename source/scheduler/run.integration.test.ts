@@ -73,6 +73,7 @@ suite('the scheduler against real git', () => {
 				worktrees: createWorktreeManager({ git: createGitRunner({ cwd: repo }), fs }, { repoPath: repo }),
 				blueprint,
 				now: createCounterClock(),
+				monotonicNow: createCounterClock(),
 				events: () => {},
 				control: createRunControl(),
 			},

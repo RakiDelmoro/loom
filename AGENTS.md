@@ -233,6 +233,7 @@ loom/
     ├── run-bench.ts   the composition root for a suite run
     ├── run-tuner.ts   the composition root for an optimization run
     ├── serve.ts       the composition root for the HTTP API and UI
+    ├── demo.ts        a self-contained demo: temp repo, stub model, UI server
     ├── errors.ts      ValidationError, describeError
     ├── result.ts      OpResult — the outcome of a fallible operation
     ├── validation.ts  the shared validation vocabulary (expect*, rejectUnknownKeys)

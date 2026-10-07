@@ -31,6 +31,7 @@ function dependencies(provider: Provider, tools: ToolRegistry = createToolRegist
 		control: createRunControl(),
 		events: () => {},
 		now: createCounterClock(),
+		monotonicNow: createCounterClock(),
 	}
 }
 
@@ -162,6 +163,7 @@ describe('runAgentLoop', () => {
 			control: createRunControl(),
 			events: () => {},
 			now: createCounterClock(),
+			monotonicNow: createCounterClock(),
 		}
 
 		await runAgentLoop(deps, request)
@@ -189,10 +191,41 @@ describe('runAgentLoop', () => {
 			control: createRunControl(),
 			events: () => {},
 			now: createCounterClock(),
+			monotonicNow: createCounterClock(),
 		}
 
 		await runAgentLoop(deps, { ...request, maxChildren: 2 })
 		expect(peak).toBe(2)
+	})
+
+	test('a wall clock that steps backwards cannot make a turn duration negative', async () => {
+		// A resumed VM or an NTP correction moves the wall clock backwards, and it
+		// really happens — this was found in a run whose log timestamps went back
+		// 2.5s mid-flight. A duration is measured on the monotonic clock for exactly
+		// this reason; a negative latency is never a truthful answer.
+		let wall = 1_700_000_000_000
+		let monotonic = 0
+		const provider = createFakeProvider([toolCallResponse([call('f', 'finish', { status: 'success', summary: 'done' })])])
+		const events: RunEvent[] = []
+
+		await runAgentLoop(
+			{
+				provider,
+				tools: createToolRegistry([]),
+				delegate: async () => ({ status: 'success', summary: 'child' }),
+				policy: createToolPolicy({ mode: 'workspace-write', requireApproval: [], approvals: [] }),
+				control: createRunControl(),
+				// Every wall-clock reading is five seconds behind the last one.
+				now: () => (wall -= 5_000),
+				monotonicNow: () => (monotonic += 7),
+				events: (event) => events.push(event),
+			},
+			request,
+		)
+
+		const turn = events.find((event) => event.type === 'model_call')
+		expect(turn?.type).toBe('model_call')
+		expect(turn?.type === 'model_call' ? turn.durationMs : -1).toBe(7)
 	})
 
 	test('a provider failure ends the role with an error card', async () => {
@@ -252,6 +285,7 @@ describe('runAgentLoop', () => {
 				delegate: async () => ({ status: 'success', summary: 'child' }),
 				events: (event) => events.push(event),
 				now: createCounterClock(),
+				monotonicNow: createCounterClock(),
 			},
 			{ ...request, allowedTools: ['write_file', 'finish'] },
 		)

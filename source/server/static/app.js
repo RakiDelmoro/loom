@@ -170,17 +170,22 @@ function render() {
 
 	const trace = el('trace')
 	trace.replaceChildren()
+	const byId = new Map(state.spans.map((span) => [span.id, span]))
 	for (const span of state.spans) {
 		const row = document.createElement('div')
 		row.className = `span span-${span.kind}`
-		// Indentation is the nesting: an agent's turns and tools sit under it.
-		const depth = span.parentId === null ? 0 : 1
+		// Indentation is the nesting, walked from the root: a subagent's turns sit
+		// under the subagent, not level with it.
+		let depth = 0
+		for (let parent = span.parentId; parent !== null && byId.has(parent) && depth < 8; depth += 1) {
+			parent = byId.get(parent).parentId
+		}
 		row.style.paddingLeft = `${String(8 + depth * 18)}px`
 		row.append(text(span.name))
 
 		const right = document.createElement('span')
 		right.className = 'dim'
-		const latency = span.finishedAt === null ? '…' : `${String(span.attributes.durationMs ?? 0)}ms`
+		const latency = span.finishedAt === null ? '…' : `${String(Math.round(span.attributes.durationMs ?? 0))}ms`
 		right.append(text(`${latency} · $${span.costUsd.toFixed(4)}`))
 		row.append(right)
 		trace.append(row)

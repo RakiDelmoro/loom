@@ -37,6 +37,7 @@ function createRun(options: {
 			worktrees: options.worktrees ?? createFakeWorktrees(),
 			blueprint: options.blueprint,
 			now: options.now ?? createCounterClock(),
+			monotonicNow: createCounterClock(),
 			events: (event) => events.push(event),
 			control: createRunControl(),
 		},

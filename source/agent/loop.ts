@@ -50,6 +50,14 @@ export interface AgentLoopDependencies {
 	readonly delegate: (request: DelegationRequest) => Promise<ResultCard>
 	readonly events: RunEventSink
 	readonly now: () => number
+	/**
+	 * A monotonic millisecond reading, for durations only.
+	 *
+	 * `now` is a wall clock, and a wall clock steps: NTP corrects it, a resumed VM
+	 * re-syncs it, and it can go backwards. An absolute timestamp should follow it;
+	 * an elapsed time must not, or a run reports a negative latency.
+	 */
+	readonly monotonicNow: () => number
 }
 
 export interface AgentLoopRequest {
@@ -96,7 +104,7 @@ export async function runAgentLoop(
 			dependencies.events({ type: 'operator_notice', agentId: request.agentId, message: notice })
 		}
 
-		const callStartedAt = dependencies.now()
+		const callStartedAt = dependencies.monotonicNow()
 		const result = await dependencies.provider.chat({
 			model: request.profile.model,
 			messages,
@@ -104,7 +112,7 @@ export async function runAgentLoop(
 			temperature: request.profile.temperature,
 			maxTokens: request.profile.maxTokens ?? DEFAULT_MAX_TOKENS,
 		})
-		const callFinishedAt = dependencies.now()
+		const callFinishedAt = dependencies.monotonicNow()
 
 		if (result.kind !== 'success') {
 			return settle(
@@ -130,7 +138,9 @@ export async function runAgentLoop(
 			model: request.profile.model,
 			usage: result.response.usage,
 			messageCount: messages.length,
-			durationMs: callFinishedAt - callStartedAt,
+			// Whole milliseconds: the field is named for them, and a monotonic clock's
+			// sub-millisecond precision is not something the record claims to carry.
+			durationMs: Math.round(callFinishedAt - callStartedAt),
 		})
 
 		const toolCalls = result.response.toolCalls

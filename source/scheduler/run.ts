@@ -35,6 +35,7 @@ export interface SchedulerDependencies {
 	readonly worktrees: WorktreeManager
 	readonly blueprint: LoadedBlueprint
 	readonly now: () => number
+	readonly monotonicNow: () => number
 	readonly events: RunEventSink
 	readonly control: RunControl
 }
@@ -185,6 +186,7 @@ export function createScheduler(
 				delegate: (request) => execute(state, request.role, request.task, agentId, depth + 1),
 				events: dependencies.events,
 				now: dependencies.now,
+				monotonicNow: dependencies.monotonicNow,
 			},
 			{
 				agentId,

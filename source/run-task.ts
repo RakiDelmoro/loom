@@ -152,7 +152,16 @@ export async function runTask(options: RunTaskOptions): Promise<RunOutcome> {
 	}
 
 	const scheduler = createScheduler(
-		{ providers, tools, worktrees, blueprint, now: () => Date.now(), events, control: options.control },
+		{
+			providers,
+			tools,
+			worktrees,
+			blueprint,
+			now: () => Date.now(),
+			monotonicNow: () => performance.now(),
+			events,
+			control: options.control,
+		},
 		{ repoPath: options.repoPath, prices: deployment.prices, modelOverrides: options.modelOverrides, approvals: options.approvals },
 	)
 

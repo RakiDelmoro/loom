@@ -103,6 +103,54 @@ describe('createRunRecorder', () => {
 		expect(latest?.status).toBe('running')
 	})
 
+	test('agents are listed in spawn order, not finish order', () => {
+		const { recorder } = createRecorder()
+		recorder.begin()
+
+		// The parent spawns the child, and the child finishes first — which is the
+		// normal shape of a delegation, and the reason ordering by finish is wrong.
+		recorder.events({
+			type: 'agent_start',
+			agentId: 'orchestrator-0-1',
+			role: 'orchestrator',
+			parentId: null,
+			depth: 0,
+		})
+		recorder.events({ type: 'agent_start', agentId: 'worker-1-2', role: 'worker', parentId: 'orchestrator-0-1', depth: 1 })
+		recorder.events(finishEvent)
+		recorder.events({ ...finishEvent, agentId: 'orchestrator-0-1', role: 'orchestrator', parentId: null, depth: 0 })
+
+		const manifest = recorder.finish(result)
+		expect(manifest.agents.map((agent) => agent.agentId)).toEqual(['orchestrator-0-1', 'worker-1-2'])
+	})
+
+	test('a finish with no matching start still records the agent', () => {
+		const { recorder } = createRecorder()
+		recorder.begin()
+		// A log replayed from disk may not carry the start; the agent must not vanish.
+		recorder.events(finishEvent)
+		expect(recorder.finish(result).agents.map((agent) => agent.agentId)).toEqual(['worker-1-2'])
+	})
+
+	test('an agent that starts but never finishes is not invented into the manifest', () => {
+		const { recorder } = createRecorder()
+		recorder.begin()
+		recorder.events({ type: 'agent_start', agentId: 'slow-0-1', role: 'worker', parentId: null, depth: 0 })
+
+		expect(recorder.finish(result).agents).toEqual([])
+	})
+
+	test('an agent finishing twice does not appear twice', () => {
+		const { recorder } = createRecorder()
+		recorder.begin()
+		recorder.events(finishEvent)
+		recorder.events({ ...finishEvent, status: 'error', summary: 'then failed' })
+
+		const manifest = recorder.finish(result)
+		expect(manifest.agents).toHaveLength(1)
+		expect(manifest.agents[0]?.status).toBe('error')
+	})
+
 	test('the run total is the sum of its agents, broken down by model', () => {
 		const { recorder } = createRecorder()
 		recorder.begin()
