@@ -3,9 +3,6 @@
 		"together": {
 			"baseUrl": "https://api.together.ai/v1",
 			"apiKeyEnv": "TOGETHER_API_KEY"
-		},
-		"local": {
-			"baseUrl": "http://localhost:8080/v1"
 		}
 	},
 
@@ -13,7 +10,6 @@
 		"deepseek-ai/DeepSeek-V4.1-Flash": { "inputPer1M": 0.3, "cachedInputPer1M": 0.006, "outputPer1M": 1.2 },
 		"deepseek-ai/DeepSeek-V4-Flash-0731": { "inputPer1M": 0.14, "cachedInputPer1M": 0.03, "outputPer1M": 0.28 },
 		"zai-org/GLM-5.3-Flash": { "inputPer1M": 0.15, "cachedInputPer1M": 0.03, "outputPer1M": 0.5 },
-
-		"qwen3-coder-30b": { "inputPer1M": 0, "cachedInputPer1M": 0, "outputPer1M": 0 }
+		"moonshotai/Kimi-K3": { "inputPer1M": 3, "cachedInputPer1M": 0.3, "outputPer1M": 15 }
 	}
 }

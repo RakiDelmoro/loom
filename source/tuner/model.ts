@@ -44,6 +44,9 @@ Reply with a JSON array of hypotheses and nothing else:
 ]
 
 ${CONTRACT_RULES}
+
+A proposal is judged alone, and must clear the promotion margin by itself: the loop does not accumulate near-misses, so several changes that each save a few percent are all discarded. Make each hypothesis a complete change worth having on its own.
+
 Propose few, concrete, testable changes. Vague wording tweaks are worthless.`
 
 const MERGE_SYSTEM = `You combine several accepted edits to a Blueprint into one coherent set.
