@@ -81,6 +81,21 @@ export type RunEvent =
 			readonly messageCount: number
 			readonly durationMs: number
 	  }
+	| {
+			/**
+			 * A model call that produced no answer, and the wait before asking again.
+			 *
+			 * The endpoint may recover — a local server 500s on a tool call it cannot
+			 * parse, a provider rate-limits, a quantised model finishes a sentence
+			 * without emitting anything. The event exists so the recovery is *visible*
+			 * rather than inferred from a run that mysteriously carried on.
+			 */
+			readonly type: 'model_retry'
+			readonly agentId: string
+			readonly attempt: number
+			readonly delayMs: number
+			readonly reason: string
+	  }
 	| { readonly type: 'error'; readonly agentId: string; readonly kind: string; readonly message: string }
 	| {
 			/** A message the operator injected into a running role's conversation. */

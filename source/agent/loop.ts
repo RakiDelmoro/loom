@@ -14,7 +14,7 @@
 
 import type { RoutingProfile } from '../blueprint/types.ts'
 import { isRecord } from '../guards.ts'
-import type { Message, Provider, ToolCall, ToolSpec, Usage } from '../model/types.ts'
+import type { ChatResult, Message, Provider, ToolCall, ToolSpec, Usage } from '../model/types.ts'
 import type { RunControl } from '../runs/control.ts'
 import type { RunEventSink } from '../runs/events.ts'
 import type { ToolPolicy } from '../tools/policy.ts'
@@ -58,6 +58,8 @@ export interface AgentLoopDependencies {
 	 * an elapsed time must not, or a run reports a negative latency.
 	 */
 	readonly monotonicNow: () => number
+	/** Waits, for the backoff between attempts. Injected so tests do not wait. */
+	readonly sleep: (milliseconds: number) => Promise<void>
 }
 
 export interface AgentLoopRequest {
@@ -104,14 +106,44 @@ export async function runAgentLoop(
 			dependencies.events({ type: 'operator_notice', agentId: request.agentId, message: notice })
 		}
 
+		// The endpoint may not answer usefully the first time: a local server 500s on
+		// a tool call it cannot parse, a provider rate-limits, a quantised model
+		// finishes a sentence having emitted nothing. A role that gave up on one of
+		// those would make autonomy impossible — and a role that called an empty
+		// answer "Completed." would report work it never did, which is how a coder
+		// came back successful with no commit at all.
+		const ask = async (): Promise<ChatResult> => {
+			const answer = await dependencies.provider.chat({
+				model: request.profile.model,
+				messages,
+				tools: request.toolSpecs,
+				temperature: request.profile.temperature,
+				maxTokens: request.profile.maxTokens ?? DEFAULT_MAX_TOKENS,
+			})
+			// Every attempt is billed, the discarded ones included: a retry that cost
+			// nothing would make the run's total a lie.
+			if (answer.kind === 'success') {
+				usage.inputTokens += answer.response.usage.inputTokens
+				usage.cachedInputTokens += answer.response.usage.cachedInputTokens
+				usage.outputTokens += answer.response.usage.outputTokens
+			}
+			return answer
+		}
+
 		const callStartedAt = dependencies.monotonicNow()
-		const result = await dependencies.provider.chat({
-			model: request.profile.model,
-			messages,
-			tools: request.toolSpecs,
-			temperature: request.profile.temperature,
-			maxTokens: request.profile.maxTokens ?? DEFAULT_MAX_TOKENS,
-		})
+		let result = await ask()
+		for (let attempt = 1; attempt <= MODEL_RETRY_LIMIT && isRetryable(result); attempt += 1) {
+			const delayMs = MODEL_RETRY_BASE_MS * 2 ** (attempt - 1)
+			dependencies.events({
+				type: 'model_retry',
+				agentId: request.agentId,
+				attempt,
+				delayMs,
+				reason: describeUnusable(result),
+			})
+			await dependencies.sleep(delayMs)
+			result = await ask()
+		}
 		const callFinishedAt = dependencies.monotonicNow()
 
 		if (result.kind !== 'success') {
@@ -128,9 +160,22 @@ export async function runAgentLoop(
 			)
 		}
 
-		usage.inputTokens += result.response.usage.inputTokens
-		usage.cachedInputTokens += result.response.usage.cachedInputTokens
-		usage.outputTokens += result.response.usage.outputTokens
+		if (isEmptyCompletion(result)) {
+			return settle(
+				{
+					status: 'error',
+					summary: `the model answered with nothing, ${String(MODEL_RETRY_LIMIT + 1)} times running`,
+					error: {
+						kind: 'empty_completion',
+						message: 'the endpoint returned neither content nor a tool call, repeatedly',
+					},
+				},
+				turns,
+				usage,
+				startedAt,
+				dependencies.now(),
+			)
+		}
 
 		dependencies.events({
 			type: 'model_call',
@@ -151,10 +196,11 @@ export async function runAgentLoop(
 		})
 
 		if (toolCalls.length === 0) {
-			// The model answered without asking for a tool: that is a finish.
-			const summary = result.response.content.trim()
+			// Answered in prose without asking for a tool: that is a finish. An empty
+			// answer is not — it was retried above, and is an error by the time we are
+			// here, because "Completed." is a claim and not a default.
 			return settle(
-				{ status: 'success', summary: summary === '' ? 'Completed.' : summary },
+				{ status: 'success', summary: result.response.content.trim() },
 				turns,
 				usage,
 				startedAt,
@@ -293,6 +339,41 @@ async function executeToolCall(
 		workspaceRoot: request.workspaceRoot,
 	})
 	return { serialized: JSON.stringify(result), kind: result.kind, payload: result }
+}
+
+/**
+ * How many times a role re-asks an endpoint that did not answer, and the first
+ * wait. Exponential from there: 250ms, 500ms, 1s.
+ */
+const MODEL_RETRY_LIMIT = 3
+const MODEL_RETRY_BASE_MS = 250
+
+/** An endpoint answering with neither content nor a tool call has not answered. */
+function isEmptyCompletion(result: ChatResult): boolean {
+	return result.kind === 'success' && result.response.toolCalls.length === 0 && result.response.content.trim() === ''
+}
+
+/**
+ * A call the endpoint may do better on if asked again.
+ *
+ * `invalid_response` is deliberately not here: it means the provider answered
+ * with something unparseable, and asking the same thing again does not fix that.
+ */
+function isRetryable(result: ChatResult): boolean {
+	switch (result.kind) {
+		case 'unavailable':
+		case 'timeout':
+		case 'rate_limited':
+			return true
+		case 'success':
+			return isEmptyCompletion(result)
+		default:
+			return false
+	}
+}
+
+function describeUnusable(result: ChatResult): string {
+	return result.kind === 'success' ? 'the endpoint returned neither content nor a tool call' : result.message
 }
 
 function settle(card: ResultCard, turns: number, usage: Usage, startedAt: number, finishedAt: number): AgentOutcome {

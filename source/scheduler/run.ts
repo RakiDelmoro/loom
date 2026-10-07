@@ -37,6 +37,7 @@ export interface SchedulerDependencies {
 	readonly blueprint: LoadedBlueprint
 	readonly now: () => number
 	readonly monotonicNow: () => number
+	readonly sleep: (milliseconds: number) => Promise<void>
 	readonly events: RunEventSink
 	readonly control: RunControl
 }
@@ -230,6 +231,7 @@ export function createScheduler(
 				events: dependencies.events,
 				now: dependencies.now,
 				monotonicNow: dependencies.monotonicNow,
+				sleep: dependencies.sleep,
 			},
 			{
 				agentId,

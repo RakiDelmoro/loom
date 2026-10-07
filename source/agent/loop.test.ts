@@ -32,6 +32,7 @@ function dependencies(provider: Provider, tools: ToolRegistry = createToolRegist
 		events: () => {},
 		now: createCounterClock(),
 		monotonicNow: createCounterClock(),
+		sleep: async () => {},
 	}
 }
 
@@ -164,6 +165,7 @@ describe('runAgentLoop', () => {
 			events: () => {},
 			now: createCounterClock(),
 			monotonicNow: createCounterClock(),
+			sleep: async () => {},
 		}
 
 		await runAgentLoop(deps, request)
@@ -192,6 +194,7 @@ describe('runAgentLoop', () => {
 			events: () => {},
 			now: createCounterClock(),
 			monotonicNow: createCounterClock(),
+			sleep: async () => {},
 		}
 
 		await runAgentLoop(deps, { ...request, maxChildren: 2 })
@@ -218,6 +221,7 @@ describe('runAgentLoop', () => {
 				// Every wall-clock reading is five seconds behind the last one.
 				now: () => (wall -= 5_000),
 				monotonicNow: () => (monotonic += 7),
+				sleep: async () => {},
 				events: (event) => events.push(event),
 			},
 			request,
@@ -228,11 +232,65 @@ describe('runAgentLoop', () => {
 		expect(turn?.type === 'model_call' ? turn.durationMs : -1).toBe(7)
 	})
 
-	test('a provider failure ends the role with an error card', async () => {
-		const provider = createFakeProvider([{ kind: 'unavailable', message: 'endpoint down' }])
-		const outcome = await runAgentLoop(dependencies(provider), request)
+	test('a provider failure is retried, and the role carries on when the endpoint recovers', async () => {
+		// A local server 500s on a tool call it cannot parse; a provider rate-limits.
+		// A role that gave up on the first hiccup would make autonomy impossible.
+		const provider = createFakeProvider([
+			{ kind: 'unavailable', message: 'HTTP 500: failed to parse tool call arguments' },
+			{ kind: 'unavailable', message: 'HTTP 500: failed to parse tool call arguments' },
+			toolCallResponse([call('f', 'finish', { status: 'success', summary: 'recovered' })]),
+		])
+		const events: RunEvent[] = []
+		const outcome = await runAgentLoop({ ...dependencies(provider), events: (event) => void events.push(event) }, request)
+
+		expect(outcome.card.status).toBe('success')
+		expect(outcome.card.summary).toBe('recovered')
+		expect(events.filter((event) => event.type === 'model_retry').map((event) => event.attempt)).toEqual([1, 2])
+	})
+
+	test('a provider failure that keeps failing ends the role, bounded', async () => {
+		const provider = createFakeProvider(() => ({ kind: 'unavailable', message: 'endpoint down' }))
+		const events: RunEvent[] = []
+		const outcome = await runAgentLoop({ ...dependencies(provider), events: (event) => void events.push(event) }, request)
+
 		expect(outcome.card.status).toBe('error')
 		expect(outcome.card.error?.kind).toBe('unavailable')
+		// Bounded: a genuinely broken endpoint ends the role rather than the run.
+		expect(events.filter((event) => event.type === 'model_retry')).toHaveLength(3)
+	})
+
+	test('an unparseable answer is not retried', async () => {
+		// `invalid_response` means the provider answered with nonsense; asking the
+		// same thing again does not fix that, so it fails on the first one.
+		const provider = createFakeProvider(() => ({ kind: 'invalid_response', message: 'not JSON' }))
+		const events: RunEvent[] = []
+		const outcome = await runAgentLoop({ ...dependencies(provider), events: (event) => void events.push(event) }, request)
+
+		expect(outcome.card.status).toBe('error')
+		expect(outcome.card.error?.kind).toBe('invalid_response')
+		expect(events.filter((event) => event.type === 'model_retry')).toHaveLength(0)
+	})
+
+	test('an answer with neither content nor a tool call is not a finish', async () => {
+		// This is how a coder came back "successful" having committed nothing:
+		// an empty completion was read as the role finishing, and named "Completed.".
+		const provider = createFakeProvider(() => textResponse(''))
+		const outcome = await runAgentLoop(dependencies(provider), request)
+
+		expect(outcome.card.status).toBe('error')
+		expect(outcome.card.error?.kind).toBe('empty_completion')
+		expect(outcome.card.summary).not.toContain('Completed')
+	})
+
+	test('an empty answer followed by a real one is only a hiccup', async () => {
+		const provider = createFakeProvider([
+			textResponse(''),
+			toolCallResponse([call('f', 'finish', { status: 'success', summary: 'done' })]),
+		])
+		const outcome = await runAgentLoop(dependencies(provider), request)
+
+		expect(outcome.card.status).toBe('success')
+		expect(outcome.card.summary).toBe('done')
 	})
 
 	test('a role that never finishes hits its turn limit', async () => {
@@ -286,6 +344,7 @@ describe('runAgentLoop', () => {
 				events: (event) => events.push(event),
 				now: createCounterClock(),
 				monotonicNow: createCounterClock(),
+				sleep: async () => {},
 			},
 			{ ...request, allowedTools: ['write_file', 'finish'] },
 		)

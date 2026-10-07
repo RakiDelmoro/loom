@@ -159,6 +159,7 @@ export async function runTask(options: RunTaskOptions): Promise<RunOutcome> {
 			blueprint,
 			now: () => Date.now(),
 			monotonicNow: () => performance.now(),
+			sleep: (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
 			events,
 			control: options.control,
 		},

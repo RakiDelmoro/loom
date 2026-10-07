@@ -40,6 +40,7 @@ function createRun(options: {
 			blueprint: options.blueprint,
 			now: options.now ?? createCounterClock(),
 			monotonicNow: createCounterClock(),
+			sleep: async () => {},
 			events: (event) => events.push(event),
 			control: createRunControl(),
 		},
