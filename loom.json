@@ -41,8 +41,7 @@
 				"list_dir",
 				"run_shell",
 				"git_diff",
-				"finish",
-				"fetch_url"
+				"finish"
 			],
 			"label": {
 				"detailed": "Coder",
@@ -87,8 +86,7 @@
 		"tools/write_file.json",
 		"tools/list_dir.json",
 		"tools/run_shell.json",
-		"tools/git_diff.json",
-		"tools/fetch_url.json"
+		"tools/git_diff.json"
 	],
 	"routing": {
 		"reasoner": {
