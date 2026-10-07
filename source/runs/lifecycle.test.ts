@@ -3,7 +3,11 @@ import { createFakeGit, ok } from '../test-support/fake-git.ts'
 import { createMemoryFileSystem } from '../test-support/memory-fs.ts'
 import type { GitResult } from '../workspace/git.ts'
 import { createWorktreeManager } from '../workspace/worktree.ts'
-import { createRunLifecycle } from './lifecycle.ts'
+import { createCounterClock } from '../test-support/clock.ts'
+import { noRedaction } from '../redact.ts'
+import { createRunLifecycle, reconcileInterruptedRuns } from './lifecycle.ts'
+import { createRunStore } from './store.ts'
+import type { RunManifest } from './types.ts'
 
 function createLifecycle(respond: (args: readonly string[]) => GitResult | undefined) {
 	const git = createFakeGit(respond)
@@ -85,5 +89,59 @@ describe('clean', () => {
 	test('removes the run\u2019s worktrees', () => {
 		const { lifecycle } = createLifecycle((args) => (args[0] === 'worktree' ? ok('') : undefined))
 		expect(lifecycle.clean('run-1', { branches: true })).toEqual({ kind: 'ok', value: [] })
+	})
+})
+
+describe('reconcileInterruptedRuns', () => {
+	const manifest: RunManifest = {
+		runId: 'run-1',
+		status: 'running',
+		task: 'do it',
+		baseRef: 'HEAD',
+		baseSha: 'abc123',
+		autonomy: 'auto',
+		startedAt: '2026-10-07T14:22:33.000Z',
+		finishedAt: null,
+		agents: [],
+		usage: { inputTokens: 0, cachedInputTokens: 0, outputTokens: 0 },
+		costUsd: 0,
+		models: [],
+	}
+
+	function createStore() {
+		const memory = createMemoryFileSystem({}, ['/repo'])
+		return createRunStore(
+			{ fs: memory.fs, now: createCounterClock(1_700_000_000_000), redact: noRedaction },
+			{ repoPath: '/repo' },
+		)
+	}
+
+	test('a run left running by a process that exited is marked interrupted', () => {
+		// Nothing can be in flight when a reader starts, so `running` can only mean
+		// the process that owned the run is gone. Left alone the UI reports a run
+		// that is happening beside a log that stopped hours ago — which is what an
+		// operator saw, and had no way to tell from a slow run.
+		const store = createStore()
+		store.writeManifest('run-1', manifest)
+
+		expect(reconcileInterruptedRuns(store, () => 1_700_000_000_000)).toEqual(['run-1'])
+
+		const after = store.readManifest('run-1')
+		expect(after?.status).toBe('interrupted')
+		expect(after?.finishedAt).toBe('2023-11-14T22:13:20.000Z')
+
+		// The reason goes in the log, exactly as it does for a run that was killed:
+		// the two doors into "this run is over" should read the same afterwards.
+		const last = store.readEvents('run-1').at(-1)
+		expect(last?.type).toBe('error')
+	})
+
+	test('a run that already finished is left alone', () => {
+		const store = createStore()
+		store.writeManifest('run-1', { ...manifest, status: 'success', finishedAt: '2026-10-07T14:30:00.000Z' })
+
+		expect(reconcileInterruptedRuns(store, () => 1_700_000_000_000)).toEqual([])
+		expect(store.readManifest('run-1')?.status).toBe('success')
+		expect(store.readEvents('run-1')).toHaveLength(0)
 	})
 })

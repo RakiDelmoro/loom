@@ -10,7 +10,7 @@
 import { loadDeployment } from './deployment/load.ts'
 import type { FileSystem } from './fs.ts'
 import { createRunStore } from './runs/store.ts'
-import { createRunLifecycle } from './runs/lifecycle.ts'
+import { createRunLifecycle, reconcileInterruptedRuns } from './runs/lifecycle.ts'
 import { runTask, generateRunId } from './run-task.ts'
 import { createRunService } from './server/service.ts'
 import { startServer, defaultStaticRoot } from './server/server.ts'
@@ -46,6 +46,13 @@ export async function serve(options: ServeOptions): Promise<ServeHandle> {
 
 	// Read once, for the price table the trace needs. A run re-reads its own copy.
 	const deployment = loadDeployment({ readTextFile: options.fs.readTextFile }, options.deploymentPath)
+
+	// Nothing can be in flight yet — this process has only just started — so any
+	// run still marked `running` is one whose process died. Say so before serving,
+	// or the UI reports a run that is happening when it stopped hours ago.
+	for (const runId of reconcileInterruptedRuns(store, () => Date.now())) {
+		options.write(`run ${runId} was left running by a process that has exited; marked interrupted\n`)
+	}
 
 	const service = createRunService({
 		store,

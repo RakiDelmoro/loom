@@ -73,6 +73,43 @@ export function undoRun(store: RunStore, lifecycle: RunLifecycle, runId: string)
 	return ok(manifest.baseSha)
 }
 
+/**
+ * Marks runs that were in flight when the process driving them died.
+ *
+ * A run can only be *in flight* inside the process running it, so any manifest
+ * that still says `running` when a reader starts is one whose process is gone —
+ * a crash, a kill, a container that was stopped. Nothing will ever finish it.
+ *
+ * This is the same defect as a run killed by a request, reached through a
+ * different door: the request path is handled where the signal arrives, but a
+ * process that dies never gets to run anything. Left alone, the UI reports
+ * "running" beside a log that stopped hours ago, and the operator is told a
+ * thing is happening when nothing is.
+ *
+ * Written exactly as the killed-run path writes it, so a run that was killed and
+ * a run whose process died read the same way afterwards.
+ */
+export function reconcileInterruptedRuns(store: RunStore, now: () => number): readonly string[] {
+	const recovered: string[] = []
+	for (const runId of store.listRunIds()) {
+		const manifest = store.readManifest(runId)
+		if (manifest === null || manifest.status !== 'running') continue
+		store.appendEvent(runId, {
+			type: 'error',
+			agentId: 'run',
+			kind: 'interrupted',
+			message: 'the process serving this run exited before it finished',
+		})
+		store.writeManifest(runId, {
+			...manifest,
+			status: 'interrupted',
+			finishedAt: new Date(now()).toISOString(),
+		})
+		recovered.push(runId)
+	}
+	return recovered
+}
+
 export interface RunLifecycleDependencies {
 	readonly git: GitRunner
 	readonly worktrees: WorktreeManager
