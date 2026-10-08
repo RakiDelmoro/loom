@@ -198,6 +198,20 @@ describe('runAgentLoop', () => {
 		expect(lastToolMessage(second)).toContain('invalid_arguments')
 	})
 
+	test('an error finish carries its error kind, so the parent can route on it', async () => {
+		// The loop detector's verdict dies if the kind is dropped: the parent
+		// re-delegates on `loop_detected`, and falls back to splitting on it.
+		const provider = createFakeProvider([
+			toolCallResponse([call('f', 'finish', { status: 'error', summary: 'stuck', error: { kind: 'loop_detected', message: 'repeats' } })]),
+		])
+
+		const outcome = await runAgentLoop(dependencies(provider), request)
+
+		expect(outcome.card.status).toBe('error')
+		expect(outcome.card.error?.kind).toBe('loop_detected')
+		expect(outcome.card.error?.message).toBe('repeats')
+	})
+
 	test('delegates through the callback and carries the child card back', async () => {
 		const provider = createFakeProvider([
 			toolCallResponse([call('a1', 'agent', { role: 'worker', task: 'sub task' })]),

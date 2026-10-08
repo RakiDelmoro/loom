@@ -574,9 +574,15 @@ function cardFromFinish(call: ToolCall): ResultCard | null {
 	if (typeof summary !== 'string' || summary === '') return null
 
 	const artifacts = args['artifacts']
+	// An error card's kind is the routing signal the parent acts on — a handler's
+	// `loop_detected` verdict dies here if the object is dropped.
+	const error = args['error']
+	const errorKind = isRecord(error) && typeof error['kind'] === 'string' ? error['kind'] : undefined
+	const errorMessage = isRecord(error) && typeof error['message'] === 'string' ? error['message'] : ''
 	return {
 		status,
 		summary,
 		...(Array.isArray(artifacts) ? { artifacts: artifacts.filter((item): item is string => typeof item === 'string') } : {}),
+		...(errorKind !== undefined ? { error: { kind: errorKind, message: errorMessage } } : {}),
 	}
 }
