@@ -36,6 +36,15 @@ const OWNER_FILE = 'owner.json'
  */
 export interface RunOwner {
 	readonly pid: number
+	/**
+	 * The repository the run happened in.
+	 *
+	 * A run's diff needs its branches, and those live in the repository it ran in
+	 * — which is not necessarily the one a *viewer* is serving. Recording it is
+	 * what lets a viewer read the diff from where it actually is instead of
+	 * reporting that it cannot. Absent on records written before this existed.
+	 */
+	readonly repoPath?: string
 }
 
 export interface RunStoreDependencies {
@@ -117,7 +126,9 @@ export function createRunStore(dependencies: RunStoreDependencies, options: { re
 			}
 			if (typeof parsed !== 'object' || parsed === null) return null
 			const pid = (parsed as { readonly pid?: unknown }).pid
-			return typeof pid === 'number' ? { pid } : null
+			if (typeof pid !== 'number') return null
+			const repoPath = (parsed as { readonly repoPath?: unknown }).repoPath
+			return typeof repoPath === 'string' ? { pid, repoPath } : { pid }
 		},
 
 		listRunIds(): readonly string[] {

@@ -634,3 +634,12 @@ button:disabled {
 	min-height: 0;
 	flex: none;
 }
+
+.empty.failed {
+	color: var(--bad);
+	text-align: left;
+	padding: 16px 16px 0;
+	font-family: ui-monospace, monospace;
+	font-size: 12px;
+	word-break: break-all;
+}

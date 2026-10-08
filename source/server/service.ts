@@ -24,6 +24,8 @@ import type { RunTaskOptions } from '../run-task.ts'
 export interface RunServiceDependencies {
 	readonly store: RunStore
 	readonly lifecycle: RunLifecycle
+	/** A lifecycle bound to another repository, for a run that did not happen in this one. */
+	readonly lifecycleFor: (repoPath: string) => RunLifecycle
 	readonly startRun: (options: RunTaskOptions) => Promise<unknown>
 	readonly newRunId: () => string
 	readonly repoPath: string
@@ -62,6 +64,20 @@ export interface RunService {
 
 export function createRunService(dependencies: RunServiceDependencies): RunService {
 	let active: { readonly runId: string; readonly control: RunControl; readonly abort: AbortController } | null = null
+
+	/**
+	 * The operations that read a run's branches must run where the branches are.
+	 *
+	 * A run records the repository it happened in, so a viewer serving a different
+	 * one can still read a diff — the thing that shows the work rather than the
+	 * story of it. A record from before this existed falls back to the serving
+	 * repository, which is what every caller meant until now.
+	 */
+	function lifecycleFor(runId: string): RunLifecycle {
+		const owner = dependencies.store.readOwner(runId)
+		if (owner?.repoPath === undefined || owner.repoPath === dependencies.repoPath) return dependencies.lifecycle
+		return dependencies.lifecycleFor(owner.repoPath)
+	}
 
 	return {
 		submit(request: SubmitRequest): OpResult<{ readonly runId: string }> {
@@ -130,15 +146,15 @@ export function createRunService(dependencies: RunServiceDependencies): RunServi
 		},
 
 		diff(runId: string, agentId: string | null): OpResult<string> {
-			return diffRun(dependencies.store, dependencies.lifecycle, runId, agentId)
+			return diffRun(dependencies.store, lifecycleFor(runId), runId, agentId)
 		},
 
 		merge(runId: string, agentId: string): OpResult<string> {
-			return mergeAgent(dependencies.store, dependencies.lifecycle, runId, agentId)
+			return mergeAgent(dependencies.store, lifecycleFor(runId), runId, agentId)
 		},
 
 		undo(runId: string): OpResult<string> {
-			return undoRun(dependencies.store, dependencies.lifecycle, runId)
+			return undoRun(dependencies.store, lifecycleFor(runId), runId)
 		},
 
 		stop(): void {

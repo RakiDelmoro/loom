@@ -22,6 +22,8 @@ const state = {
 	manifest: null,
 	events: [],
 	diff: null,
+	/** Set when the diff could not be read at all, which is not the same as empty. */
+	diffError: null,
 	tab: 'graph',
 	selectedAgent: null,
 	error: null,
@@ -232,6 +234,7 @@ function renderGraph() {
 
 		box.addEventListener('click', () => {
 			state.selectedAgent = state.selectedAgent === node.agentId ? null : node.agentId
+			state.diffError = null
 			state.diffFor = null
 			void refresh()
 		})
@@ -367,6 +370,7 @@ function scopeBanner(agentId) {
 	// A filter with no sign that it is on is a filter that reads as missing data.
 	line.append(button('all events', () => {
 		state.selectedAgent = null
+		state.diffError = null
 		state.diffFor = null
 		void refresh()
 	}))
@@ -380,6 +384,22 @@ function scopeBanner(agentId) {
 function renderDiff() {
 	const panel = el('panel-diff')
 	panel.replaceChildren()
+
+	// A diff that could not be read is not a diff that is empty, and the two want
+	// different things done about them: one is a wait, the other is a repository.
+	if (state.diffError !== null) {
+		panel.append(h('div', 'empty failed', `The diff could not be read: ${state.diffError}`))
+		panel.append(
+			h(
+				'div',
+				'empty',
+				'A diff needs the run\u2019s branch, and a run whose record was read from another ' +
+					'repository does not have one here. The graph, the events and the inspector are ' +
+					'the record itself and are unaffected.',
+			),
+		)
+		return
+	}
 
 	if (state.diff === null || state.diff.trim() === '') {
 		panel.append(h('div', 'empty', 'No diff yet.'))
@@ -451,6 +471,7 @@ function renderRunList() {
 			state.selected = run.runId
 			state.events = []
 			state.diff = null
+			state.diffError = null
 			state.diffFor = null
 			state.selectedAgent = null
 			void refresh()
@@ -531,8 +552,17 @@ async function refresh() {
 			const wanted = `${state.selected}:${state.selectedAgent ?? ''}:${state.manifest.status}`
 			if (state.diffFor !== wanted) {
 				const agent = state.selectedAgent === null ? '' : `?agent=${encodeURIComponent(state.selectedAgent)}`
-				const diff = await api(`/api/runs/${state.selected}/diff${agent}`)
-				state.diff = diff.diff
+				try {
+					const diff = await api(`/api/runs/${state.selected}/diff${agent}`)
+					state.diff = diff.diff
+					state.diffError = null
+				} catch (error) {
+					// A diff needs the run's branch, and a record viewed from another
+					// repository has none here. Saying "no diff yet" would claim the
+					// work was empty, when the truth is that it cannot be read.
+					state.diff = null
+					state.diffError = error instanceof Error ? error.message : String(error)
+				}
 				state.diffFor = wanted
 			}
 		}
@@ -566,6 +596,7 @@ el('submit').addEventListener('submit', async (event) => {
 		task.value = ''
 		state.selected = started.runId
 		state.selectedAgent = null
+		state.diffError = null
 		state.diffFor = null
 	} catch (error) {
 		state.error = error instanceof Error ? error.message : String(error)

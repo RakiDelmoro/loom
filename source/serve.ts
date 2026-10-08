@@ -58,6 +58,15 @@ export async function serve(options: ServeOptions): Promise<ServeHandle> {
 	const service = createRunService({
 		store,
 		lifecycle,
+		// For a run that happened in another repository: the port forwards to it,
+		// so a viewer can show the diff without being the repository the run used.
+		lifecycleFor: (repoPath) => {
+			const gitForRun = createGitRunner({ cwd: repoPath })
+			return createRunLifecycle(
+				{ git: gitForRun, worktrees: createWorktreeManager({ git: gitForRun, fs: options.fs }, { repoPath }) },
+				{ repoPath },
+			)
+		},
 		startRun: (runOptions) => runTask(runOptions),
 		newRunId: () => generateRunId(new Date()),
 		repoPath: options.repoPath,
