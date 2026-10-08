@@ -151,6 +151,21 @@ deployment needs nothing but `cargo` on the path. Every task was checked both
 ways before it was committed: the shipped workspace fails its validation, and a
 reference fix passes it.
 
+**The split is part of the design, not a label. Each half needs a floor and a
+ceiling.** The optimization half must contain at least one task the baseline
+fails, or there is nothing to improve and the loop is stillborn: the first cut of
+this suite put all five tasks the baseline passes in that half, scored 1.0, and
+reproduced the very dead end the suite was written to remove. The held-out half
+needs one too, or its gate is vacuous rather than strict — a baseline of 1.0
+cannot be improved on, so no candidate could ever pass it.
+
+Which task sits where follows the failure, not the difficulty.
+`rust_refactor_duplicate` is optimized against because its failure is
+orchestration-shaped — seventeen agents, seven coders, five files, and a final
+tree that does not compile — and prompts and topology are what move that.
+`rust_expression_parser` is held out because its failure is a capability wall,
+and no prompt change should be able to fake it.
+
 ---
 
 ## 8. Acceptance tests (M5)

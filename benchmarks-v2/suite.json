@@ -2,13 +2,13 @@
 	"optimization": [
 		"rust_range_off_by_one",
 		"rust_split_borrow",
-		"rust_utf8_truncate",
 		"rust_error_trait",
-		"rust_ring_buffer"
+		"rust_ring_buffer",
+		"rust_refactor_duplicate"
 	],
 	"heldOut": [
+		"rust_utf8_truncate",
 		"rust_binary_search_bounds",
-		"rust_refactor_duplicate",
 		"rust_expression_parser"
 	]
 }
