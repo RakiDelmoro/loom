@@ -515,6 +515,64 @@ button:disabled {
 	color: var(--bad);
 }
 
+/* Whose transcript is on screen. Sticky, because the answer to "wait, is this
+   filtered?" must not scroll away from the thing it is filtering. */
+.scope {
+	position: sticky;
+	top: 0;
+	z-index: 2;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	padding: 8px 16px;
+	background: var(--panel);
+	border-bottom: 1px solid var(--line);
+}
+
+.scope-line {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.scope-line .kv {
+	color: var(--text-faint);
+}
+
+.scope-line button {
+	margin-left: auto;
+}
+
+.scope-summary {
+	color: var(--text-faint);
+	font-size: 12px;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.pill {
+	padding: 0 6px;
+	border-radius: 8px;
+	font-size: 11px;
+	background: var(--line);
+}
+
+.pill.status-success {
+	background: var(--good);
+	color: var(--bg);
+}
+
+.pill.status-error {
+	background: var(--bad);
+	color: var(--bg);
+}
+
+.pill.status-running {
+	background: var(--warn);
+	color: var(--bg);
+}
+
 /* --- diff --------------------------------------------------------------- */
 
 .diff {

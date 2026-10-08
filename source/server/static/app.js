@@ -322,13 +322,22 @@ function describeEvent(record) {
 function renderEvents() {
 	const panel = el('panel-events')
 	panel.replaceChildren()
-	if (state.events.length === 0) {
-		panel.append(h('div', 'empty', 'No events.'))
+
+	// Selecting an agent scopes the whole inspector: the graph highlights it, the
+	// diff is its diff, and this is its transcript. Without the last one, the one
+	// question a run raises most often — what did *this* agent actually do? — is
+	// answered by scrolling a 600-line feed of every agent at once.
+	const scoped = state.selectedAgent
+	const records = scoped === null ? state.events : state.events.filter((record) => record.event['agentId'] === scoped)
+	if (scoped !== null) panel.append(scopeBanner(scoped))
+
+	if (records.length === 0) {
+		panel.append(h('div', 'empty', scoped === null ? 'No events.' : 'This agent has logged nothing yet.'))
 		return
 	}
 
 	const feed = h('div', 'feed')
-	for (const record of state.events) {
+	for (const record of records) {
 		const row = h('div', `event k-${record.type}`)
 		row.append(h('span', 'at', record.at.slice(11, 19)))
 		row.append(h('span', 'kind', record.type))
@@ -339,8 +348,31 @@ function renderEvents() {
 	// Follow the stream only when the reader is already at the bottom, so scrolling
 	// back to read something is not yanked away by the next poll.
 	const following = panel.scrollHeight - panel.scrollTop - panel.clientHeight < 40
-	panel.replaceChildren(feed)
+	panel.append(feed)
 	if (following) panel.scrollTop = panel.scrollHeight
+}
+
+/** Whose transcript this is, what became of it, and the way back to the whole run. */
+function scopeBanner(agentId) {
+	const banner = h('div', 'scope')
+	const agent = (state.manifest?.agents ?? []).find((entry) => entry.agentId === agentId)
+
+	const line = h('div', 'scope-line')
+	line.append(h('span', 'kv', 'showing '))
+	line.append(h('b', null, agentId))
+	if (agent !== undefined) {
+		line.append(h('span', 'kv', ` ${agent.role} `))
+		line.append(h('span', `pill status-${agent.status}`, agent.status))
+	}
+	// A filter with no sign that it is on is a filter that reads as missing data.
+	line.append(button('all events', () => {
+		state.selectedAgent = null
+		state.diffFor = null
+		void refresh()
+	}))
+	banner.append(line)
+	if (agent !== undefined) banner.append(h('div', 'scope-summary', agent.summary))
+	return banner
 }
 
 /* --- the diff ------------------------------------------------------------ */
