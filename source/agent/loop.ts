@@ -113,6 +113,12 @@ export async function runAgentLoop(
 	/** Tool calls and output tokens since the last loop-check cadence crossing. */
 	let toolCallsSinceCheck = 0
 	let outputSinceCheck = 0
+	/**
+	 * Every tool call this role has made, for the loop detector. The handler's
+	 * verdict is only as good as the history it sees: the last turn's calls show
+	 * one write, while the role may have written the identical file nine times.
+	 */
+	const toolCallTrace: { readonly name: string; readonly arguments: string }[] = []
 	/** The pressure notice fires once per role; the conversation only grows. */
 	let contextNoticeSent = false
 
@@ -304,9 +310,10 @@ export async function runAgentLoop(
 		}
 
 		// The loop detector. With no turn limit, a stuck role would spin forever,
-		// so on the cadence the engine asks the handler role to judge the recent
-		// work; a `loop_detected` verdict ends this role with that card.
+		// so on the cadence the engine asks the handler role to judge the work so
+		// far; a `loop_detected` verdict ends this role with that card.
 		if (dependencies.loopCheck !== null && request.loopCheckExempt !== true) {
+			toolCallTrace.push(...toolCalls.map((callItem) => ({ name: callItem.name, arguments: callItem.arguments })))
 			toolCallsSinceCheck += toolCalls.length
 			outputSinceCheck += result.response.usage.outputTokens
 			if (toolCallsSinceCheck >= dependencies.loopCheck.everyToolCalls || outputSinceCheck >= dependencies.loopCheck.everyTokens) {
@@ -314,7 +321,7 @@ export async function runAgentLoop(
 				outputSinceCheck = 0
 				const verdict = await dependencies.delegate({
 					role: dependencies.loopCheck.handlerRole,
-					task: loopCheckTask(request, toolCalls),
+					task: loopCheckTask(request, toolCallTrace),
 				})
 				dependencies.events({
 					type: 'loop_check',
@@ -332,17 +339,36 @@ export async function runAgentLoop(
 }
 
 /**
- * The handler's briefing: what the target was asked, and its tool-call trace —
- * the handler reads nothing else, so the trace must name the tools and their
- * shape. Repeated identical calls are the loop signature.
+ * The handler's briefing: what the target was asked, and its **full** tool-call
+ * history — the handler reads nothing else, so the evidence has to be complete.
+ * The last turn alone hides a loop: nine identical writes look like one. The
+ * window keeps the briefing bounded on long-horizon roles, and the repeat
+ * counts name the signature directly, so "same call, N times" is legible
+ * without the handler diffing lines itself.
  */
-function loopCheckTask(request: AgentLoopRequest, recentCalls: readonly ToolCall[]): string {
-	const calls = recentCalls.map((callItem) => `${callItem.name}(${callItem.arguments.slice(0, 120)})`).join('\n')
+function loopCheckTask(request: AgentLoopRequest, trace: readonly { readonly name: string; readonly arguments: string }[]): string {
+	const WINDOW = 40
+	const recent = trace.slice(-WINDOW)
+	const counts = new Map<string, number>()
+	for (const callItem of trace) {
+		const signature = `${callItem.name} ${callItem.arguments}`
+		counts.set(signature, (counts.get(signature) ?? 0) + 1)
+	}
+	const repeats = [...counts.entries()]
+		.filter(([, count]) => count > 1)
+		.sort((left, right) => right[1] - left[1])
+		.slice(0, 5)
+		.map(([signature, count]) => `  ${String(count)}x identical: ${signature.slice(0, 100)}`)
+		.join('\n')
+	const calls = recent.map((callItem) => `${callItem.name}(${callItem.arguments.slice(0, 120)})`).join('\n')
 	return [
 		`Role "${request.agentId}" may be stuck in a loop. Its task: ${request.task}`,
-		'Its most recent tool calls:',
+		`Its last ${String(recent.length)} tool calls (of ${String(trace.length)} total):`,
 		calls,
-		'Decide whether this role is making progress or repeating itself.',
+		repeats === '' ? 'No tool call was repeated with identical arguments.' : 'Calls repeated with byte-identical arguments:',
+		repeats,
+		'Decide whether this role is making progress or repeating itself without progress.',
+		'Identical repeated calls with the same failing result are a loop; similar calls whose results differ are progress.',
 		'If it repeats without progress, call finish with status "error" and error.kind "loop_detected".',
 		'If it is making progress, call finish with status "success" and a one-line summary.',
 	].join('\n')
