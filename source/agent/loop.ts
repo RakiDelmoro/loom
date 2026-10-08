@@ -177,6 +177,23 @@ export async function runAgentLoop(
 			durationMs: Math.round(callFinishedAt - callStartedAt),
 		})
 
+		// A reply cut off at the output cap is not a usable answer, even when the
+		// tool call inside it parsed. It is refused as a typed error rather than
+		// dispatched, so a half-written file never reaches the workspace.
+		if (result.response.finishReason === 'length') {
+			return settle(
+				{
+					status: 'error',
+					summary: `the model's reply was cut off at the output limit (${String(request.profile.maxTokens ?? DEFAULT_MAX_TOKENS)} tokens)`,
+					error: { kind: 'output_truncated', message: 'the reply reached the output token limit before it finished' },
+				},
+				turns,
+				usage,
+				startedAt,
+				dependencies.now(),
+			)
+		}
+
 		const toolCalls = result.response.toolCalls
 		messages.push({
 			role: 'assistant',

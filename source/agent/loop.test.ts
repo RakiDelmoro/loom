@@ -75,6 +75,38 @@ describe('runAgentLoop', () => {
 		expect(outcome.card.summary).toContain('let me think about it')
 	})
 
+	test('a reply cut off at the output limit is refused, and its tool call never runs', async () => {
+		// A truncated reply can carry a tool call that looks complete. Running it
+		// would write half a file, so the whole reply is refused.
+		let ran = 0
+		const tools = createToolRegistry([
+			{
+				name: 'echo',
+				run: async () => {
+					ran += 1
+					return { kind: 'success', data: null }
+				},
+			},
+		])
+		const provider = createFakeProvider([
+			{
+				kind: 'success',
+				response: {
+					content: '',
+					toolCalls: [call('c1', 'echo', {})],
+					usage: { inputTokens: 0, cachedInputTokens: 0, outputTokens: 0 },
+					finishReason: 'length',
+				},
+			},
+		])
+
+		const outcome = await runAgentLoop(dependencies(provider, tools), request)
+
+		expect(ran).toBe(0)
+		expect(outcome.card.status).toBe('error')
+		expect(outcome.card.error?.kind).toBe('output_truncated')
+	})
+
 	test('dispatches a tool call and feeds its result back', async () => {
 		const tools = createToolRegistry([{ name: 'echo', run: async (args) => ({ kind: 'success', data: args }) }])
 		let second: ChatRequest | undefined
