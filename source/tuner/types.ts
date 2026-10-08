@@ -45,9 +45,10 @@ export interface TunerConfig {
 	/** The guild directory: the directory holding the baseline Blueprint. */
 	readonly guildPath: string
 	readonly deploymentPath: string
-	readonly maxCycles: number
-	/** The Tuner's own ceiling on optimization spend. Not the engine's. */
-	readonly maxCostUsd: number
+	/** Absent: the cycle budget does not bind, and the plateau is the only stop. */
+	readonly maxCycles?: number
+	/** The Tuner's own ceiling on optimization spend. Not the engine's. Absent: unbounded. */
+	readonly maxCostUsd?: number
 	readonly plateauLimit: number
 	/** How far the candidate's score must beat the baseline, beyond the interval. */
 	readonly improvementMargin: number

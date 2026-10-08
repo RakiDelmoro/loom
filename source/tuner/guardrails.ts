@@ -17,10 +17,10 @@ export interface Termination {
 }
 
 export function shouldTerminate(state: TunerState, config: TunerConfig): Termination {
-	if (state.costUsd >= config.maxCostUsd) {
+	if (config.maxCostUsd !== undefined && state.costUsd >= config.maxCostUsd) {
 		return { stop: true, reason: `the Tuner's own spend reached $${state.costUsd.toFixed(4)} (ceiling $${config.maxCostUsd.toFixed(2)})` }
 	}
-	if (state.cycles >= config.maxCycles) {
+	if (config.maxCycles !== undefined && state.cycles >= config.maxCycles) {
 		return { stop: true, reason: `the cycle budget of ${String(config.maxCycles)} is spent` }
 	}
 	if (state.plateau >= config.plateauLimit) {

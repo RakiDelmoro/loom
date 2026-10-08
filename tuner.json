@@ -2,14 +2,10 @@
 	"suitePath": "benchmarks-v2",
 	"guildPath": ".",
 	"deploymentPath": "loom.deployment.json",
-
-	"maxCycles": 3,
-	"maxCostUsd": 5,
 	"plateauLimit": 2,
 	"improvementMargin": 0.1,
 	"costMargin": 0.2,
 	"repetitions": 3,
-
 	"bigModel": {
 		"provider": "together",
 		"model": "deepseek-ai/DeepSeek-V4.1-Flash"
