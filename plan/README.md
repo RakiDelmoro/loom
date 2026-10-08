@@ -30,7 +30,7 @@ A **benchmark** is one task; the **Bench** is the thing that runs them all.
 
 > Concurrency and isolation are the hard half. Measurement is the other hard half. The tuner is worthless without both.
 
-The concept — orchestrating a small model into a network of specialized roles — is not original, and the field is crowded (AutoGen, LangGraph, CrewAI, DSPy, SWE-agent, OpenHands). The reference implementation (`Zoltu/orchestration-builder`) has the concept and a strong design, but explicitly **refused** parallelism, worktrees, and per-task isolation, and **deferred** the evaluation bench and the tuner. Loom is built on exactly those deferrals.
+The concept — orchestrating a small model into a network of specialized roles — is not original, and the field is crowded (AutoGen, LangGraph, CrewAI, DSPy, SWE-agent, OpenHands). The reference implementation (`Zoltu/orchestration-builder`) has the concept and a strong design. It **shipped a bench** — nine benchmarks and a validation runner, with the same `pass` / `fail` / `error` trichotomy — but it **scored pass/fail only**: no interval, no held-out split, no cost accounting. It **refused** parallelism, worktrees, and per-task isolation, and it left its optimizer, the Foundry, as a design document rather than a program. Loom is built on those gaps.
 
 ## Documents
 

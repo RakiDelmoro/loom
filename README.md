@@ -68,7 +68,12 @@ Read [`AGENTS.md`](AGENTS.md) before changing anything, and
 The concept — orchestrating a small model into a network of specialized roles —
 is not original, and the field is crowded. The reference implementation
 ([`Zoltu/orchestration-builder`](https://github.com/Zoltu/orchestration-builder))
-has the concept and a strong design, but explicitly *refused* parallelism,
-worktrees, and per-task isolation, and *deferred* the evaluation bench and the
-tuner. **Loom is built on exactly those deferrals**, and on the conviction that
-the scoreboard has to come before the loop that optimizes it.
+has the concept and a strong design. It **shipped a bench** — nine benchmarks
+and a validation runner, with the same `pass` / `fail` / `error` trichotomy — but
+scored it **pass/fail only**: no interval, no held-out split, no cost. It
+*refused* parallelism, worktrees, and per-task isolation, and left its optimizer
+as a design document rather than a program.
+
+**Loom is built on those gaps** — not on *a* bench, which the reference had, but
+on a bench that **discriminates** — and on the conviction that the scoreboard has
+to come before the loop that optimizes it.

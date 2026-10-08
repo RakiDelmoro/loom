@@ -21,7 +21,7 @@ The concept is not original. The field:
 
 What is rare is the **combination**: a system whose entire behavior is data, measured by its own bench, optimized by a closed loop.
 
-The reference implementation (`Zoltu/orchestration-builder`) has the concept and a strong design, but explicitly **refused** parallelism, worktrees, and per-task isolation, and **deferred** both the evaluation bench and the tuner. Loom is built on exactly those two deferrals. They are the moat.
+The reference implementation (`Zoltu/orchestration-builder`) has the concept and a strong design. It **shipped a bench** — nine benchmarks and a validation runner, with the same `pass` / `fail` / `error` trichotomy — but it **scored pass/fail only**: no interval, no held-out split, no cost accounting. It **refused** parallelism, worktrees, and per-task isolation, and it left its optimizer, the Foundry, as a design document rather than a program. Loom is built on those gaps. They are the moat: not *a* bench — it had one — but a bench that **discriminates**.
 
 **Loom's thesis, one line:** *concurrency and isolation are the hard half, measurement is the other hard half, and the tuner is worthless without both.*
 
