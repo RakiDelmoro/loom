@@ -1,0 +1,13 @@
+{
+	"name": "search",
+	"description": "Search the workspace's text files for a substring, returning each match's path, line number, and line.",
+	"parameters": {
+		"type": "object",
+		"properties": {
+			"query": { "type": "string", "description": "The text to find." },
+			"path": { "type": "string", "description": "Optional path prefix to limit the search to." }
+		},
+		"required": ["query"],
+		"additionalProperties": false
+	}
+}

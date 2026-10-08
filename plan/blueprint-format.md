@@ -76,9 +76,11 @@ Validated strictly: **unknown keys are rejected at every level**, so a typo fail
 }
 ```
 
-Manifests declare `name`, `description`, and JSON-Schema `parameters`. The engine validates every call against the schema before dispatch. Built-in tools are listed like any other; the engine provides their implementation.
+Manifests declare `name`, `description`, and JSON-Schema `parameters`. The manifest is what the model is shown; the role's `tools` grant is what the engine enforces before dispatch, and a call outside it is refused with `unknown_tool`. Built-in tools are listed like any other; the engine provides their implementation.
 
-**Built-ins (engine-implemented):** `agent`, `finish`, `read_file`, `write_file`, `list_dir`, `glob`, `search`, `run_shell`, `git_status`, `git_diff`, `git_log`, plus inspection tools for overseer roles (`list_agent_messages`, `read_message_window`, `search_agent_blocks`, `recent_tool_calls`).
+**Built-ins (engine-implemented):** `agent`, `finish`, `read_file`, `write_file`, `list_dir`, `glob`, `search`, `run_shell`, `git_status`, `git_diff`, `git_log`, `fetch_url`.
+
+The `agent` manifest's description is extended at run time with the Blueprint's role names, so a model chooses a role that exists instead of inventing one — a guess comes back `role_not_found` and costs a turn.
 
 ---
 

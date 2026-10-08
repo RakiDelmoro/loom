@@ -348,6 +348,29 @@ describe('createScheduler', () => {
 		expect(harness.events.some((event) => event.type === 'error' && event.kind === 'role_not_found')).toBe(true)
 	})
 
+	test('lists the Blueprint’s roles on the agent tool, so a delegation names a real one', async () => {
+		// A model that has to guess a role name invents a plausible one — a run
+		// asked for `reader`, got `role_not_found`, and burned a turn on it. The
+		// tool it is about to call is where the list belongs.
+		const blueprint = createTestBlueprint({
+			orchestrator: { tools: ['agent'], isolation: 'shared' },
+			coder: { tools: [], isolation: 'shared' },
+			reviewer: { tools: [], isolation: 'shared' },
+		})
+		let seen: ChatRequest | undefined
+		const provider = createFakeProvider((request) => {
+			seen = request
+			return toolCallResponse([call('f', 'finish', { status: 'success', summary: 'done' })])
+		})
+
+		await createRun({ blueprint, provider }).run({ runId: 'run-1', task: 'go' })
+
+		const agentTool = seen?.tools.find((tool) => tool.name === 'agent')
+		expect(agentTool?.description).toContain('orchestrator')
+		expect(agentTool?.description).toContain('coder')
+		expect(agentTool?.description).toContain('reviewer')
+	})
+
 	test('records a branch and a commit for every worktree-isolated agent', async () => {
 		const blueprint = createTestBlueprint({ orchestrator: { tools: [] } })
 		const worktrees = createFakeWorktrees()

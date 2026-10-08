@@ -1,0 +1,9 @@
+{
+	"name": "git_status",
+	"description": "Show the workspace's git status in porcelain form.",
+	"parameters": {
+		"type": "object",
+		"properties": {},
+		"additionalProperties": false
+	}
+}

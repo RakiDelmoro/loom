@@ -1,0 +1,12 @@
+{
+	"name": "glob",
+	"description": "Find files in the workspace whose path matches a glob pattern.",
+	"parameters": {
+		"type": "object",
+		"properties": {
+			"pattern": { "type": "string", "description": "A glob pattern, for example \"src/**/*.ts\"." }
+		},
+		"required": ["pattern"],
+		"additionalProperties": false
+	}
+}

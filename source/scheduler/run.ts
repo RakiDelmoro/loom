@@ -11,7 +11,7 @@
  * limit, the tool timeout, and the deployment container.
  */
 
-import { runAgentLoop } from '../agent/loop.ts'
+import { AGENT_TOOL, runAgentLoop } from '../agent/loop.ts'
 import type { ResultCard } from '../agent/types.ts'
 import type { LoadedBlueprint, LoadedRole } from '../blueprint/types.ts'
 import { computeCost, ZERO_PRICE } from '../deployment/cost.ts'
@@ -94,6 +94,11 @@ export function createScheduler(
 ): { run(request: RunRequest): Promise<RunResult> } {
 	const { blueprint } = dependencies
 	const pool = createPool({ maxConcurrent: blueprint.budgets.maxConcurrentAgents })
+	// Sorted, so one Blueprint always offers one list. A model that has to guess a
+	// role name invents a plausible one — `reader`, `writer` — and the delegation
+	// comes back `role_not_found`; naming the roster in the tool's own description
+	// is what makes the guess unnecessary.
+	const roleNames = Object.keys(blueprint.roles).sort()
 	// One policy for the run: the mode and the approval list do not vary by role.
 	const policy = createToolPolicy({
 		mode: blueprint.permissions.mode,
@@ -106,7 +111,13 @@ export function createScheduler(
 		const granted = new Set(role.tools)
 		return blueprint.tools
 			.filter((manifest) => granted.has(manifest.name))
-			.map((manifest) => ({ name: manifest.name, description: manifest.description, parameters: manifest.parameters }))
+			.map((manifest) => ({
+				name: manifest.name,
+				description: manifest.name === AGENT_TOOL
+					? `${manifest.description}\n\nRoles available: ${roleNames.join(', ')}.`
+					: manifest.description,
+				parameters: manifest.parameters,
+			}))
 	}
 
 	/**

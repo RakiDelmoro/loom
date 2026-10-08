@@ -1,0 +1,11 @@
+{
+	"name": "git_log",
+	"description": "Show the workspace's recent commits.",
+	"parameters": {
+		"type": "object",
+		"properties": {
+			"limit": { "type": "integer", "description": "How many commits to show; defaults to 20." }
+		},
+		"additionalProperties": false
+	}
+}

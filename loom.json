@@ -23,6 +23,8 @@
 			"tools": [
 				"read_file",
 				"list_dir",
+				"glob",
+				"search",
 				"finish"
 			],
 			"isolation": "shared",
@@ -32,6 +34,25 @@
 				"whimsical": "Strategist"
 			}
 		},
+		"researcher": {
+			"prompt": "prompts/researcher.md",
+			"model": "worker",
+			"tools": [
+				"read_file",
+				"list_dir",
+				"glob",
+				"search",
+				"git_log",
+				"fetch_url",
+				"finish"
+			],
+			"isolation": "shared",
+			"label": {
+				"detailed": "Researcher",
+				"friendly": "Researcher",
+				"whimsical": "Scout"
+			}
+		},
 		"coder": {
 			"prompt": "prompts/coder.md",
 			"model": "worker",
@@ -39,14 +60,37 @@
 				"read_file",
 				"write_file",
 				"list_dir",
+				"glob",
+				"search",
 				"run_shell",
+				"git_status",
 				"git_diff",
 				"finish"
 			],
+			"styleGuide": "prompts/style.md",
 			"label": {
 				"detailed": "Coder",
 				"friendly": "Coder",
 				"whimsical": "Builder"
+			}
+		},
+		"tester": {
+			"prompt": "prompts/tester.md",
+			"model": "worker",
+			"tools": [
+				"read_file",
+				"list_dir",
+				"glob",
+				"search",
+				"run_shell",
+				"git_status",
+				"git_diff",
+				"finish"
+			],
+			"label": {
+				"detailed": "Tester",
+				"friendly": "Tester",
+				"whimsical": "Prover"
 			}
 		},
 		"reviewer": {
@@ -55,6 +99,8 @@
 			"tools": [
 				"read_file",
 				"list_dir",
+				"glob",
+				"search",
 				"git_diff",
 				"finish"
 			],
@@ -63,6 +109,163 @@
 				"detailed": "Reviewer",
 				"friendly": "Reviewer",
 				"whimsical": "Inspector"
+			}
+		},
+		"architecture_lead": {
+			"prompt": "prompts/architecture_lead.md",
+			"model": "reasoner",
+			"tools": [
+				"agent",
+				"finish"
+			],
+			"parallel": {
+				"maxChildren": 2
+			},
+			"label": {
+				"detailed": "Architecture Lead",
+				"friendly": "Architecture Lead",
+				"whimsical": "Chief Architect"
+			}
+		},
+		"architecture_reviewer": {
+			"prompt": "prompts/architecture_reviewer.md",
+			"model": "reasoner",
+			"tools": [
+				"read_file",
+				"list_dir",
+				"glob",
+				"search",
+				"git_diff",
+				"finish"
+			],
+			"isolation": "shared",
+			"label": {
+				"detailed": "Architecture Reviewer",
+				"friendly": "Architecture Reviewer",
+				"whimsical": "Blueprint Inspector"
+			}
+		},
+		"style_lead": {
+			"prompt": "prompts/style_lead.md",
+			"model": "reasoner",
+			"tools": [
+				"agent",
+				"finish"
+			],
+			"parallel": {
+				"maxChildren": 2
+			},
+			"styleGuide": "prompts/style.md",
+			"label": {
+				"detailed": "Style Lead",
+				"friendly": "Style Lead",
+				"whimsical": "Style Maven"
+			}
+		},
+		"style_reviewer": {
+			"prompt": "prompts/style_reviewer.md",
+			"model": "worker",
+			"tools": [
+				"read_file",
+				"list_dir",
+				"glob",
+				"search",
+				"git_diff",
+				"finish"
+			],
+			"isolation": "shared",
+			"styleGuide": "prompts/style.md",
+			"label": {
+				"detailed": "Style Reviewer",
+				"friendly": "Style Reviewer",
+				"whimsical": "Style Sleuth"
+			}
+		},
+		"security_lead": {
+			"prompt": "prompts/security_lead.md",
+			"model": "reasoner",
+			"tools": [
+				"agent",
+				"finish"
+			],
+			"parallel": {
+				"maxChildren": 2
+			},
+			"label": {
+				"detailed": "Security Lead",
+				"friendly": "Security Lead",
+				"whimsical": "Guard Captain"
+			}
+		},
+		"security_reviewer": {
+			"prompt": "prompts/security_reviewer.md",
+			"model": "reasoner",
+			"tools": [
+				"read_file",
+				"list_dir",
+				"glob",
+				"search",
+				"git_diff",
+				"finish"
+			],
+			"isolation": "shared",
+			"label": {
+				"detailed": "Security Reviewer",
+				"friendly": "Security Reviewer",
+				"whimsical": "Watchdog"
+			}
+		},
+		"acceptance_lead": {
+			"prompt": "prompts/acceptance_lead.md",
+			"model": "reasoner",
+			"tools": [
+				"agent",
+				"finish"
+			],
+			"parallel": {
+				"maxChildren": 2
+			},
+			"label": {
+				"detailed": "Acceptance Lead",
+				"friendly": "Acceptance Lead",
+				"whimsical": "Final Judge"
+			}
+		},
+		"acceptance_reviewer": {
+			"prompt": "prompts/acceptance_reviewer.md",
+			"model": "reasoner",
+			"tools": [
+				"read_file",
+				"list_dir",
+				"glob",
+				"search",
+				"git_diff",
+				"finish"
+			],
+			"isolation": "shared",
+			"label": {
+				"detailed": "Acceptance Reviewer",
+				"friendly": "Acceptance Reviewer",
+				"whimsical": "White Glove"
+			}
+		},
+		"documenter": {
+			"prompt": "prompts/documenter.md",
+			"model": "worker",
+			"tools": [
+				"read_file",
+				"list_dir",
+				"glob",
+				"search",
+				"write_file",
+				"git_diff",
+				"finish"
+			],
+			"styleGuide": "prompts/style.md",
+			"label": {
+				"detailed": "Documenter",
+				"friendly": "Documenter",
+				"whimsical": "Scribe"
 			}
 		},
 		"recovery": {
@@ -85,8 +288,13 @@
 		"tools/read_file.json",
 		"tools/write_file.json",
 		"tools/list_dir.json",
+		"tools/glob.json",
+		"tools/search.json",
 		"tools/run_shell.json",
-		"tools/git_diff.json"
+		"tools/git_status.json",
+		"tools/git_diff.json",
+		"tools/git_log.json",
+		"tools/fetch_url.json"
 	],
 	"routing": {
 		"reasoner": {
