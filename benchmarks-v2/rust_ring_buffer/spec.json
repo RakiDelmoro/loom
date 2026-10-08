@@ -1,0 +1,13 @@
+{
+	"id": "rust_ring_buffer",
+	"taskType": "feature",
+	"difficulty": "hard",
+	"task": "src/lib.rs is a stub: RingBuffer records nothing, always reports length zero, and never overwrites. Implement it so the tests in tests/ring.rs pass. The contract: a buffer holds at most `capacity` items, pushing into a full buffer drops the oldest, and `iter` yields the items from oldest to newest. Do not change the tests or the public signatures.",
+	"validation": {
+		"command": "cargo test",
+		"expectedExitCode": 0,
+		"expectedFiles": ["src/lib.rs", "tests/ring.rs"],
+		"expectedStdoutContains": ["test result: ok."],
+		"timeoutSeconds": 300
+	}
+}

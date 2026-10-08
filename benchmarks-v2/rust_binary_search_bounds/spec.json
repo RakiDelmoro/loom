@@ -1,0 +1,13 @@
+{
+	"id": "rust_binary_search_bounds",
+	"taskType": "bugfix",
+	"difficulty": "medium",
+	"task": "src/lib.rs has two binary searches. `lower_bound` is correct. `upper_bound` must return the index of the first element strictly greater than its target, but it behaves exactly like `lower_bound`, so the tests in tests/bounds.rs disagree with it whenever a value repeats. Fix `upper_bound` so every test passes. Do not change the tests.",
+	"validation": {
+		"command": "cargo test",
+		"expectedExitCode": 0,
+		"expectedFiles": ["src/lib.rs", "tests/bounds.rs"],
+		"expectedStdoutContains": ["test result: ok."],
+		"timeoutSeconds": 300
+	}
+}

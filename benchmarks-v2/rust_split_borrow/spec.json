@@ -1,0 +1,13 @@
+{
+	"id": "rust_split_borrow",
+	"taskType": "bugfix",
+	"difficulty": "medium",
+	"task": "src/lib.rs does not compile: `first_and_last` returns two mutable references into the same slice, which the borrow checker refuses. Rewrite its body so it compiles and the tests in tests/split.rs pass — each handle must write through the element it points at, and a slice with fewer than two elements must panic. Do not change the tests.",
+	"validation": {
+		"command": "cargo test",
+		"expectedExitCode": 0,
+		"expectedFiles": ["src/lib.rs", "tests/split.rs"],
+		"expectedStdoutContains": ["test result: ok."],
+		"timeoutSeconds": 300
+	}
+}

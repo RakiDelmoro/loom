@@ -1,0 +1,13 @@
+{
+	"id": "rust_utf8_truncate",
+	"taskType": "bugfix",
+	"difficulty": "medium",
+	"task": "src/lib.rs panics on non-ASCII text: slicing a &str at a byte index that falls inside a character. The tests in tests/truncate.rs state the contract — the result is the longest prefix that is at most `limit` bytes, and it never splits a character. Fix src/lib.rs. Do not change the tests.",
+	"validation": {
+		"command": "cargo test",
+		"expectedExitCode": 0,
+		"expectedFiles": ["src/lib.rs", "tests/truncate.rs"],
+		"expectedStdoutContains": ["test result: ok."],
+		"timeoutSeconds": 300
+	}
+}

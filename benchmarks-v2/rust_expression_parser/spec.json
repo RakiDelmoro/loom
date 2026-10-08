@@ -1,0 +1,13 @@
+{
+	"id": "rust_expression_parser",
+	"taskType": "feature",
+	"difficulty": "hard",
+	"task": "src/parser.rs is a stub: `evaluate` always returns UnexpectedEnd. The lexer in src/lexer.rs is complete and correct, and the error type in src/error.rs is fixed. Implement `evaluate` so the tests in tests/expressions.rs pass: integers, `+`, `-`, `*`, `/` with the usual precedence, parentheses, a leading unary minus, whitespace between tokens, integer division, and the typed errors the tests pin — an unknown character or a stray `)` reported with its byte offset, an expression that stops early as UnexpectedEnd, and division by zero as its own error. Do not change the tests, the lexer, or the error type.",
+	"validation": {
+		"command": "cargo test",
+		"expectedExitCode": 0,
+		"expectedFiles": ["src/lib.rs", "src/parser.rs", "src/lexer.rs", "src/error.rs", "tests/expressions.rs"],
+		"expectedStdoutContains": ["test result: ok."],
+		"timeoutSeconds": 300
+	}
+}

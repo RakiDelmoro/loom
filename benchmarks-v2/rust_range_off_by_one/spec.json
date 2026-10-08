@@ -1,0 +1,13 @@
+{
+	"id": "rust_range_off_by_one",
+	"taskType": "bugfix",
+	"difficulty": "easy",
+	"task": "The tests in tests/range.rs fail: range(3) returns one value too many. Fix src/lib.rs so every test passes. Do not change the tests.",
+	"validation": {
+		"command": "cargo test",
+		"expectedExitCode": 0,
+		"expectedFiles": ["src/lib.rs", "tests/range.rs"],
+		"expectedStdoutContains": ["test result: ok."],
+		"timeoutSeconds": 300
+	}
+}

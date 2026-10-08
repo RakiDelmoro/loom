@@ -132,6 +132,25 @@ A useful suite is not ten variations of one task. Aim for:
 - **A floor** — at least one task the baseline reliably passes, so a broken Blueprint scores 0 and the bench's own health is visible.
 - **A ceiling** — at least one task the baseline reliably fails, so there is headroom to measure improvement.
 
+### What ships
+
+| Suite | Language | Tasks | Difficulty |
+|---|---|---|---|
+| [`benchmarks/`](../benchmarks/) | TypeScript, `bun test` | 10 | 6 easy, 2 medium, 2 hard |
+| [`benchmarks-v2/`](../benchmarks-v2/) | Rust, `cargo test` | 8 | 1 easy, 4 medium, 3 hard |
+
+`benchmarks-v2` exists because the first suite was too easy to have a ceiling: a
+Blueprint that passes everything measures nothing. It carries the tasks a small
+model actually struggles with — two mutable borrows of one slice, a UTF-8
+boundary, a trait contract spanning three files, a ring buffer with wrap-around,
+a bounds bug that only appears on a repeated value, a three-way refactor, and a
+recursive-descent parser with typed errors.
+
+Its crates have no dependencies, so a task compiles and grades offline, and a
+deployment needs nothing but `cargo` on the path. Every task was checked both
+ways before it was committed: the shipped workspace fails its validation, and a
+reference fix passes it.
+
 ---
 
 ## 8. Acceptance tests (M5)

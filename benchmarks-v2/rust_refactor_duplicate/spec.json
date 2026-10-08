@@ -1,0 +1,13 @@
+{
+	"id": "rust_refactor_duplicate",
+	"taskType": "refactor",
+	"difficulty": "hard",
+	"task": "Three modules format a cents amount and each formats it differently, so the tests in tests/amounts.rs fail on all of them. The tests pin the one rule: an optional minus sign, the whole units, a dot, and two digits of remainder. Move that rule into a new module `src/money.rs` exposing `pub fn amount(cents: i64) -> String`, make `users`, `orders` and `invoices` each delegate to it, and declare the module from `src/lib.rs` so the test can reach it as `money`. Do not change the tests, and keep the three existing public functions where they are.",
+	"validation": {
+		"command": "cargo test",
+		"expectedExitCode": 0,
+		"expectedFiles": ["src/lib.rs", "src/money.rs", "src/users.rs", "src/orders.rs", "src/invoices.rs", "tests/amounts.rs"],
+		"expectedStdoutContains": ["test result: ok."],
+		"timeoutSeconds": 300
+	}
+}

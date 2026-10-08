@@ -60,6 +60,7 @@ bun install
 bun run loom --help
 bun run loom blueprint validate loom.json
 bun run loom bench --suite benchmarks --split optimization --repetitions 2
+bun run loom bench --suite benchmarks-v2 --split optimization --repetitions 2
 bun run loom serve --repo .          # the HTTP API and the browser UI
 ```
 
@@ -68,6 +69,14 @@ the opt-in lane that runs real git against a temporary repository.
 
 There are no runtime dependencies; see "No dependencies" in
 [`AGENTS.md`](AGENTS.md) for why that is not an accident.
+
+Two suites ship. [`benchmarks/`](benchmarks/) is the original — ten TypeScript
+tasks, most of them easy. [`benchmarks-v2/`](benchmarks-v2/) is the harder one —
+eight Rust tasks, one easy and seven medium or hard, standard library only, so a
+task compiles and grades offline and the deployment needs nothing but `cargo` on
+the path. Each suite is split into an optimization half and a held-out half; a
+promotion is judged on the held-out half, which an optimization run never
+executes.
 
 ## Where the design lives
 

@@ -1,0 +1,4 @@
+[package]
+name = "utf8_truncate"
+version = "0.1.0"
+edition = "2021"

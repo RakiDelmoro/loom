@@ -1,0 +1,13 @@
+{
+	"id": "rust_error_trait",
+	"taskType": "feature",
+	"difficulty": "medium",
+	"task": "src/parse.rs is a stub: parse_port and parse_settings always fail. The tests in tests/settings.rs state the contract — a `key=value` document, one pair per line, unknown keys ignored, `host` and `port` required, and a port that is a decimal number fitting in u16. They also pin the exact message each error must print and require the error to be a standard std::error::Error so `?` can carry it. Implement the two functions and the error's Display and Error implementations so every test passes. Do not change the tests or the error's shape (kind and key).",
+	"validation": {
+		"command": "cargo test",
+		"expectedExitCode": 0,
+		"expectedFiles": ["src/lib.rs", "src/parse.rs", "src/error.rs", "tests/settings.rs"],
+		"expectedStdoutContains": ["test result: ok."],
+		"timeoutSeconds": 300
+	}
+}
