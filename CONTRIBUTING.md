@@ -14,6 +14,44 @@ change, read [`AGENTS.md`](AGENTS.md). For the design, read [`plan/`](plan/).
 bun install
 ```
 
+## Running a local model
+
+The engine talks to any OpenAI-compatible endpoint, and `loom.deployment.json`
+points `local` at `http://127.0.0.1:8080/v1`. On this machine that endpoint is
+`llama-server` from `/opt/llama-cuda`, and **the CUDA runtime is not on the
+default library path** — started without `LD_LIBRARY_PATH` the binary finds no
+CUDA device, silently runs on the CPU, and goes five times slower (2 tokens/s
+against 11). Check with `llama-server --list-devices`: it must print `CUDA0`.
+
+```bash
+export LD_LIBRARY_PATH=/opt/llama-cuda/cudart-llama-b11461-bin-ubuntu-cuda-12.8-x64
+/opt/llama-cuda/llama-b11461/llama-server \
+  -m Qwen3.5-9B-heretic-v2.Q4_K_M.gguf --jinja \
+  -c 32768 -np 1 -ctk q8_0 -ctv q8_0 -fa on -ngl 99 \
+  --host 127.0.0.1 --port 8080
+```
+
+None of those flags is arbitrary on an 8 GiB card:
+
+| Flag | Why |
+|---|---|
+| `-c 32768 -np 1` | `-np` **divides** the context between slots. The default of 4 gives each request 8192 tokens, not 32768 — which is what the server was actually doing before this was set |
+| `-ctk q8_0 -ctv q8_0` | f16 KV costs this model 128 KiB per token (32 layers, 4 KV heads, 256-wide keys). 32k of it is 4 GiB, which does not fit beside 5.3 GiB of weights. q8_0 halves it to 2 GiB, which does |
+| `-fa on` | Flash attention — and the prerequisite for a quantised KV cache |
+| `-ngl 99` | Every layer on the GPU |
+
+Startup leaves about 7.4 GiB of the card in use. Verify the result rather than
+trusting the flags:
+
+```bash
+curl -s localhost:8080/props | jq '{n_ctx: .default_generation_settings.n_ctx, total_slots}'
+# { "n_ctx": 32768, "total_slots": 1 }
+```
+
+Context shift is disabled by default, so a prompt that overruns the context
+errors loudly instead of quietly dropping the oldest messages — which is what an
+agent loop wants, since the oldest message is usually the system prompt.
+
 ## Commands
 
 ```bash
@@ -39,7 +77,7 @@ bun run loom tune --repo .
 Validating the shipped Blueprint is the smoke test for the Blueprint layer:
 
 ```
-loom.json: ok — entry role "orchestrator", 5 role(s), 7 tool(s)
+loom.json: ok — entry role "orchestrator", 16 role(s), 12 tool(s)
 ```
 
 A rejected Blueprint reports the exact path that is wrong and exits non-zero:
@@ -59,6 +97,7 @@ tuner.json     the Tuner's configuration: the suite, the budgets, the big model
 tools/         tool manifests, referenced by path from the Blueprint
 prompts/       role system prompts, referenced by path from the Blueprint
 benchmarks/    the benchmark suite: suite.json + one directory per task
+benchmarks-v2/ the harder Rust suite, same layout
 plan/          the design documents and roadmap
 source/           the engine
 ```

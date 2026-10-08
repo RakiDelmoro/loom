@@ -301,13 +301,13 @@
 			"provider": "local",
 			"model": "qwen3.5-9b-heretic-v2",
 			"temperature": 0.2,
-			"maxTokens": 1024
+			"maxTokens": 16384
 		},
 		"worker": {
 			"provider": "local",
 			"model": "qwen3.5-9b-heretic-v2",
 			"temperature": 0.1,
-			"maxTokens": 1024
+			"maxTokens": 16384
 		}
 	},
 	"budgets": {
