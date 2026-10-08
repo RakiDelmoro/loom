@@ -598,6 +598,38 @@ describe('createScheduler', () => {
 		expect(last.length).toBeGreaterThan(1)
 	})
 
+	test('the gate refuses a success when research finished but no role ever wrote the change', async () => {
+		// The expression-parser run: orchestrator + researcher only, no coder ever
+		// delegated, and a finish card claiming "Implemented the parser". Nothing
+		// was written, so there was nothing to verify — the claim itself is the
+		// fiction the gate has to catch.
+		const blueprint = createTestBlueprint({
+			orchestrator: { tools: ['agent'], isolation: 'shared' },
+			coder: { tools: [], isolation: 'worktree' },
+		})
+		const provider = createFakeProvider((request) => {
+			const system = systemOf(request)
+			if (system.includes('You are coder.')) {
+				return toolCallResponse([call('f', 'finish', { status: 'error', summary: 'could not do it' })])
+			}
+			if (system.includes('You are orchestrator.')) {
+				if (!sawToolResult(request)) {
+					return toolCallResponse([call('a', 'agent', { role: 'coder', task: 'implement the parser' })])
+				}
+				return toolCallResponse([call('f', 'finish', { status: 'success', summary: 'Implemented the parser. All tests should now pass.' })])
+			}
+			return toolCallResponse([call('f', 'finish', { status: 'success', summary: '?' })])
+		})
+
+		const harness = createRun({ blueprint, provider })
+		const result = await harness.run({ runId: 'run-1', task: 'implement the parser' })
+
+		expect(harness.events.some((event) => event.type === 'error' && event.kind === 'unverified_success')).toBe(true)
+		// Bounded: the bounded refusal settles the run rather than looping.
+		expect(result.card.status).toBe('error')
+		expect(result.card.error?.kind).toBe('unverified_success')
+	})
+
 	test('the entry role reports success once a read-only role verified after the writer', async () => {
 		const blueprint = createTestBlueprint({
 			orchestrator: { tools: ['agent'], isolation: 'shared' },

@@ -261,8 +261,10 @@ export function createScheduler(
 				sleep: dependencies.sleep,
 				loopCheck: blueprint.budgets.loopCheck ?? null,
 				verified: () =>
-					state.lastWriterSuccessAt === null ||
-					(state.lastVerifierSuccessAt !== null && state.lastVerifierSuccessAt >= state.lastWriterSuccessAt),
+					// Nothing was written — no agent committed anything — so a success
+					// claim cannot misrepresent work; it is judged by the caller.
+					(state.lastWriterSuccessAt === null && !state.agents.some((agent) => agent.sha !== null)) ||
+					(state.lastVerifierSuccessAt !== null && state.lastVerifierSuccessAt >= state.lastWriterSuccessAt!),
 			},
 			{
 				agentId,
@@ -338,10 +340,15 @@ export function createScheduler(
 		// The verification gate's inputs. A depth-1 role that writes (holds a
 		// mutating tool) and succeeded moves the writer mark; a read-only role
 		// (tester, reviewer) that succeeded after it moves the verifier mark.
+		// The entry role writing anything itself also counts as a writer — that
+		// is the claim the gate then holds to account.
 		if (depth === 1 && outcome.card.status === 'success') {
 			const writes = role.tools.some((tool) => WORKSPACE_MUTATING_TOOLS.includes(tool as (typeof WORKSPACE_MUTATING_TOOLS)[number]))
 			if (writes) state.lastWriterSuccessAt = outcome.finishedAt
 			else state.lastVerifierSuccessAt = outcome.finishedAt
+		}
+		if (depth === 0 && outcome.card.status === 'success' && role.tools.some((tool) => WORKSPACE_MUTATING_TOOLS.includes(tool as (typeof WORKSPACE_MUTATING_TOOLS)[number]))) {
+			state.lastWriterSuccessAt = outcome.finishedAt
 		}
 
 		node.finishedAt = dependencies.now()
