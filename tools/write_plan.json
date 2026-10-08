@@ -1,0 +1,12 @@
+{
+	"name": "write_plan",
+	"description": "Write the run's plan, replacing any plan already there. The plan belongs to the run, so every other role can read it at read_plan. Write the whole plan: a revision is a rewrite, not an addition.",
+	"parameters": {
+		"type": "object",
+		"properties": {
+			"plan": { "type": "string", "description": "The complete plan, as Markdown." }
+		},
+		"required": ["plan"],
+		"additionalProperties": false
+	}
+}

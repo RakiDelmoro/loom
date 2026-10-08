@@ -78,7 +78,15 @@ Validated strictly: **unknown keys are rejected at every level**, so a typo fail
 
 Manifests declare `name`, `description`, and JSON-Schema `parameters`. The manifest is what the model is shown; the role's `tools` grant is what the engine enforces before dispatch, and a call outside it is refused with `unknown_tool`. Built-in tools are listed like any other; the engine provides their implementation.
 
-**Built-ins (engine-implemented):** `agent`, `finish`, `read_file`, `write_file`, `list_dir`, `glob`, `search`, `run_shell`, `git_status`, `git_diff`, `git_log`, `fetch_url`.
+**Built-ins (engine-implemented):** `agent`, `finish`, `read_file`, `write_file`, `list_dir`, `glob`, `search`, `run_shell`, `git_status`, `git_diff`, `git_log`, `fetch_url`, `write_plan`, `read_plan`.
+
+The plan tools are the one pair that does not touch the workspace. A run's plan
+belongs to the run, not to an agent's worktree, so `write_plan` and `read_plan`
+read and write a single file beside the run's own record under
+`<repo>/.loom/runs/<runId>/plan.md` — no path argument, because the tool has
+exactly one file. That is what lets a plan outlive the planner: a role that
+needs it reads it, and the partition of the work survives the conversation that
+produced it.
 
 The `agent` manifest's description is extended at run time with the Blueprint's role names, so a model chooses a role that exists instead of inventing one — a guess comes back `role_not_found` and costs a turn.
 

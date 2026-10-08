@@ -8,6 +8,7 @@
  */
 
 import { randomUUID } from 'node:crypto'
+import * as path from 'node:path'
 import type { ResultStatus } from './agent/types.ts'
 import { loadBlueprint } from './blueprint/load.ts'
 import type { LoadedBlueprint } from './blueprint/types.ts'
@@ -31,6 +32,7 @@ import { createGitToolHandlers } from './tools/git.ts'
 import { createFetchToolHandlers } from './tools/fetch-url.ts'
 import { createToolRegistry } from './tools/registry.ts'
 import { createRunCommand } from './tools/run-command.ts'
+import { createPlanToolHandlers } from './tools/plan.ts'
 import { createShellToolHandlers } from './tools/shell.ts'
 import { createWorkspaceToolHandlers } from './tools/workspace.ts'
 import { createGitRunner } from './workspace/git.ts'
@@ -161,6 +163,9 @@ export async function runTask(options: RunTaskOptions): Promise<RunOutcome> {
 			defaultTimeoutSeconds: blueprint.budgets.toolTimeoutSeconds,
 		}),
 		...createGitToolHandlers({ git }),
+		// The plan belongs to the run, so it lives beside the run's own record —
+		// where every agent can reach it and none owns it.
+		...createPlanToolHandlers({ fs, planPath: path.join(store.runDirectory(runId), 'plan.md') }),
 		// Egress is granted by the Blueprint, never assumed.
 		...createFetchToolHandlers({ fetch: options.fetch, allowedHosts: blueprint.permissions.egress }),
 	])

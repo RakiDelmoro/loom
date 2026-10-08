@@ -25,6 +25,8 @@
 				"list_dir",
 				"glob",
 				"search",
+				"write_plan",
+				"read_plan",
 				"finish"
 			],
 			"isolation": "shared",
@@ -65,6 +67,7 @@
 				"run_shell",
 				"git_status",
 				"git_diff",
+				"read_plan",
 				"finish"
 			],
 			"styleGuide": "prompts/style.md",
@@ -85,6 +88,7 @@
 				"run_shell",
 				"git_status",
 				"git_diff",
+				"read_plan",
 				"finish"
 			],
 			"label": {
@@ -102,6 +106,7 @@
 				"glob",
 				"search",
 				"git_diff",
+				"read_plan",
 				"finish"
 			],
 			"isolation": "shared",
@@ -136,6 +141,7 @@
 				"glob",
 				"search",
 				"git_diff",
+				"read_plan",
 				"finish"
 			],
 			"isolation": "shared",
@@ -171,6 +177,7 @@
 				"glob",
 				"search",
 				"git_diff",
+				"read_plan",
 				"finish"
 			],
 			"isolation": "shared",
@@ -206,6 +213,7 @@
 				"glob",
 				"search",
 				"git_diff",
+				"read_plan",
 				"finish"
 			],
 			"isolation": "shared",
@@ -240,6 +248,7 @@
 				"glob",
 				"search",
 				"git_diff",
+				"read_plan",
 				"finish"
 			],
 			"isolation": "shared",
@@ -294,7 +303,9 @@
 		"tools/git_status.json",
 		"tools/git_diff.json",
 		"tools/git_log.json",
-		"tools/fetch_url.json"
+		"tools/fetch_url.json",
+		"tools/write_plan.json",
+		"tools/read_plan.json"
 	],
 	"routing": {
 		"reasoner": {

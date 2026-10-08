@@ -1,0 +1,9 @@
+{
+	"name": "read_plan",
+	"description": "Read the run's plan, if one has been written. Reports whether a plan exists rather than failing when none does.",
+	"parameters": {
+		"type": "object",
+		"properties": {},
+		"additionalProperties": false
+	}
+}
