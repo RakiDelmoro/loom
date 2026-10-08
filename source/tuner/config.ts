@@ -50,8 +50,10 @@ export function parseTunerConfig(value: unknown, path = 'tuner.json'): TunerConf
 		suitePath: expectNonEmptyString(record['suitePath'], `${path}.suitePath`),
 		guildPath: expectNonEmptyString(record['guildPath'], `${path}.guildPath`),
 		deploymentPath: expectNonEmptyString(record['deploymentPath'], `${path}.deploymentPath`),
-		maxCycles: expectPositiveInteger(record['maxCycles'], `${path}.maxCycles`),
-		maxCostUsd: expectNonNegative(record['maxCostUsd'], `${path}.maxCostUsd`),
+		// Optional: a run whose goal matters more than its spend leaves the budgets
+		// out, and the guardrails only stop on the plateau.
+		...(record['maxCycles'] !== undefined ? { maxCycles: expectPositiveInteger(record['maxCycles'], `${path}.maxCycles`) } : {}),
+		...(record['maxCostUsd'] !== undefined ? { maxCostUsd: expectNonNegative(record['maxCostUsd'], `${path}.maxCostUsd`) } : {}),
 		plateauLimit: expectPositiveInteger(record['plateauLimit'], `${path}.plateauLimit`),
 		improvementMargin: expectMargin(record['improvementMargin'], `${path}.improvementMargin`),
 		costMargin: expectMargin(record['costMargin'], `${path}.costMargin`),
