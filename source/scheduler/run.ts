@@ -23,6 +23,7 @@ import type { RunControl } from '../runs/control.ts'
 import type { RunEventSink } from '../runs/events.ts'
 import { attemptKey } from '../runs/types.ts'
 import { createToolPolicy } from '../tools/policy.ts'
+import { WORKSPACE_MUTATING_TOOLS } from '../tools/types.ts'
 import type { ToolRegistry } from '../tools/types.ts'
 import type { CreatedWorktree, WorktreeManager } from '../workspace/worktree.ts'
 import { createLimitedProvider, createPool } from './pool.ts'
@@ -85,6 +86,13 @@ interface RunState {
 	readonly integrations: Map<string, Promise<void>>
 	/** Requests whose work has already been accepted into a caller's tree. */
 	readonly accepted: Set<string>
+	/**
+	 * Verification for the entry role's gate: the last depth-1 success time, and
+	 * the last successful writer time. A tester/reviewer success after the last
+	 * coder success means the work was checked by someone who did not write it.
+	 */
+	lastWriterSuccessAt: number | null
+	lastVerifierSuccessAt: number | null
 }
 
 export function createScheduler(
@@ -252,6 +260,9 @@ export function createScheduler(
 				monotonicNow: dependencies.monotonicNow,
 				sleep: dependencies.sleep,
 				loopCheck: blueprint.budgets.loopCheck ?? null,
+				verified: () =>
+					state.lastWriterSuccessAt === null ||
+					(state.lastVerifierSuccessAt !== null && state.lastVerifierSuccessAt >= state.lastWriterSuccessAt),
 			},
 			{
 				agentId,
@@ -263,6 +274,7 @@ export function createScheduler(
 				workspaceRoot,
 				maxChildren: role.maxChildren,
 				loopCheckExempt: blueprint.budgets.loopCheck?.handlerRole === roleName,
+				depth,
 			},
 		)
 
@@ -323,6 +335,15 @@ export function createScheduler(
 				: { ...card, integration: { kind: 'conflict', message: integrated.message } }
 		}
 
+		// The verification gate's inputs. A depth-1 role that writes (holds a
+		// mutating tool) and succeeded moves the writer mark; a read-only role
+		// (tester, reviewer) that succeeded after it moves the verifier mark.
+		if (depth === 1 && outcome.card.status === 'success') {
+			const writes = role.tools.some((tool) => WORKSPACE_MUTATING_TOOLS.includes(tool as (typeof WORKSPACE_MUTATING_TOOLS)[number]))
+			if (writes) state.lastWriterSuccessAt = outcome.finishedAt
+			else state.lastVerifierSuccessAt = outcome.finishedAt
+		}
+
 		node.finishedAt = dependencies.now()
 		node.card = card
 		node.sha = sha
@@ -374,6 +395,8 @@ export function createScheduler(
 				tokenAlertFired: false,
 				integrations: new Map(),
 				accepted: new Set(),
+				lastWriterSuccessAt: null,
+				lastVerifierSuccessAt: null,
 			}
 			const card = await execute(state, blueprint.entryRole, request.task, null, 0, options.repoPath)
 

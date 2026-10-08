@@ -33,6 +33,7 @@ function dependencies(provider: Provider, tools: ToolRegistry = createToolRegist
 		monotonicNow: createCounterClock(),
 		sleep: async () => {},
 		loopCheck: null,
+		verified: () => true,
 	}
 }
 
@@ -232,6 +233,7 @@ describe('runAgentLoop', () => {
 			monotonicNow: createCounterClock(),
 			sleep: async () => {},
 			loopCheck: null,
+			verified: () => true,
 		}
 
 		await runAgentLoop(deps, request)
@@ -262,6 +264,7 @@ describe('runAgentLoop', () => {
 			monotonicNow: createCounterClock(),
 			sleep: async () => {},
 			loopCheck: null,
+			verified: () => true,
 		}
 
 		await runAgentLoop(deps, { ...request, maxChildren: 2 })
@@ -290,6 +293,7 @@ describe('runAgentLoop', () => {
 				monotonicNow: () => (monotonic += 7),
 				sleep: async () => {},
 			loopCheck: null,
+			verified: () => true,
 				events: (event) => events.push(event),
 			},
 			request,
@@ -425,6 +429,7 @@ describe('runAgentLoop', () => {
 				monotonicNow: createCounterClock(),
 				sleep: async () => {},
 			loopCheck: null,
+			verified: () => true,
 			},
 			{ ...request, allowedTools: ['write_file', 'finish'] },
 		)

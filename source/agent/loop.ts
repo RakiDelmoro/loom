@@ -65,6 +65,12 @@ export interface AgentLoopDependencies {
 	 * has no detector, so the engine never checks.
 	 */
 	readonly loopCheck: LoopCheck | null
+	/**
+	 * Whether a role other than the writer has verified the work — a tester or
+	 * reviewer finished successfully after the last successful writer. The gate
+	 * consults this; the scheduler owns the record.
+	 */
+	readonly verified: () => boolean
 }
 
 export interface AgentLoopRequest {
@@ -79,6 +85,8 @@ export interface AgentLoopRequest {
 	readonly workspaceRoot: string
 	/** How many `agent` calls this role may have in flight at once. */
 	readonly maxChildren: number
+	/** 0 for the entry role — the verification gate applies only there. */
+	readonly depth?: number
 	/**
 	 * The loop-check handler is exempt from the cadence: a handler that triggered
 	 * checks on itself would recurse into itself. Undefined means not exempt.
@@ -121,6 +129,8 @@ export async function runAgentLoop(
 	const toolCallTrace: { readonly name: string; readonly arguments: string }[] = []
 	/** The pressure notice fires once per role; the conversation only grows. */
 	let contextNoticeSent = false
+	/** Success finishes the verification gate has refused; bounded by MAX_NUDGES. */
+	let gateRefusals = 0
 
 	// No turn cap. A role runs until it calls `finish`, or until the loop detector
 	// or the deployment container stops it: a fixed count fires on healthy
@@ -298,8 +308,55 @@ export async function runAgentLoop(
 
 		const finishCall = toolCalls.find((call) => call.name === FINISH_TOOL)
 		if (finishCall !== undefined) {
+			// The finish card routes the parent's next move — a handler's
+			// `loop_detected`, a `context_handoff` brief — so its raw arguments
+			// are logged: without them a misrouted verdict is undiagnosable.
+			dependencies.events({
+				type: 'tool_call',
+				agentId: request.agentId,
+				tool: finishCall.name,
+				arguments: finishCall.arguments,
+			})
 			const card = cardFromFinish(finishCall)
-			if (card !== null) return settle(card, turns, usage, startedAt, dependencies.now())
+			if (card !== null) {
+				// The verification gate. A success the entry role reports on work only
+				// its author inspected is a false report — both failed benchmark runs
+				// ended this way, `success` with red tests. If a writer succeeded and
+				// no read-only role (tester, reviewer) finished after it, the success
+				// is refused and the role is told exactly what is missing. A run where
+				// nothing was written has nothing to verify. depth 0 is the entry
+				// role: children are tasks whose parents verify. A role that keeps
+				// claiming success regardless is settled as an error after MAX_NUDGES
+				// refusals — the same bound as a role that will not call finish.
+				if (request.depth === 0 && card.status === 'success' && !dependencies.verified()) {
+					gateRefusals += 1
+					if (gateRefusals > MAX_NUDGES) {
+						return settle(
+							{
+								status: 'error',
+								summary: `the role reported success ${String(gateRefusals)} times without verification, and was refused each time`,
+								error: {
+									kind: 'unverified_success',
+									message: 'a role other than the one that wrote the change must run the checks before success',
+								},
+							},
+							turns,
+							usage,
+							startedAt,
+							dependencies.now(),
+						)
+					}
+					dependencies.events({ type: 'error', agentId: request.agentId, kind: 'unverified_success', message: 'success refused pending verification' })
+					messages.push({
+						role: 'user',
+						content:
+							'[Verification gate] You called finish with success, but no role other than the writer has run the checks. ' +
+							'Delegate to `tester` (build, tests, typecheck) and then to `reviewer` with the original task; call finish again after they report.',
+					})
+					continue
+				}
+				return settle(card, turns, usage, startedAt, dependencies.now())
+			}
 			// A malformed `finish` is reported back like any other tool error, so
 			// the model can correct it rather than the run dying on a typo.
 		}
@@ -323,14 +380,18 @@ export async function runAgentLoop(
 					role: dependencies.loopCheck.handlerRole,
 					task: loopCheckTask(request, toolCallTrace),
 				})
+				// A handler that ends in error without a structured kind is treated
+				// as a verdict to stop: an undecidable check must fail toward
+				// aborting, or a malformed finish turns the detector off.
+				const detected = verdict.status === 'error' && (verdict.error?.kind === 'loop_detected' || verdict.error?.kind === 'unfinished')
 				dependencies.events({
 					type: 'loop_check',
 					agentId: request.agentId,
 					handler: dependencies.loopCheck.handlerRole,
-					verdict: verdict.status === 'error' && verdict.error?.kind === 'loop_detected' ? 'loop_detected' : 'continue',
+					verdict: detected ? 'loop_detected' : 'continue',
 					summary: verdict.summary,
 				})
-				if (verdict.status === 'error' && verdict.error?.kind === 'loop_detected') {
+				if (detected) {
 					return settle(verdict, turns, usage, startedAt, dependencies.now())
 				}
 			}

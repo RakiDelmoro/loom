@@ -79,7 +79,7 @@ describe('createScheduler', () => {
 		expect(result.agents).toHaveLength(1)
 		expect(result.agents[0]?.role).toBe('orchestrator')
 		expect(result.agents[0]?.depth).toBe(0)
-		expect(harness.events.map((event) => event.type)).toEqual(['agent_start', 'model_call', 'agent_finish'])
+		expect(harness.events.map((event) => event.type)).toEqual(['agent_start', 'model_call', 'tool_call', 'agent_finish'])
 	})
 
 	test('runs sibling agents concurrently', async () => {
@@ -564,5 +564,67 @@ describe('createScheduler', () => {
 		const finish = harness.events.find((event) => event.type === 'agent_finish')
 		if (finish?.type !== 'agent_finish') throw new Error('no agent finished')
 		expect(finish.costUsd).toBe(0)
+	})
+
+	test('the entry role cannot report success while a writer succeeded and nothing verified it', async () => {
+		// Both failing benchmark runs ended this way: tests red, orchestrator
+		// reports success. The engine refuses the card and says what is missing.
+		const blueprint = createTestBlueprint({
+			orchestrator: { tools: ['agent'], isolation: 'shared' },
+			coder: { tools: ['write_file'], isolation: 'worktree' },
+		})
+		let coderDone = false
+		const provider = createFakeProvider((request) => {
+			const system = systemOf(request)
+			if (system.includes('You are coder.')) {
+				coderDone = true
+				return toolCallResponse([call('f', 'finish', { status: 'success', summary: 'wrote it' })])
+			}
+			if (system.includes('You are orchestrator.')) {
+				if (!coderDone) return toolCallResponse([call('a', 'agent', { role: 'coder', task: 'write the change' })])
+				if (!sawToolResult(request)) return toolCallResponse([call('a2', 'agent', { role: 'coder', task: 'write more' })])
+				return toolCallResponse([call('f', 'finish', { status: 'success', summary: 'all done' })])
+			}
+			return toolCallResponse([call('f', 'finish', { status: 'success', summary: '?' })])
+		})
+
+		const harness = createRun({ blueprint, provider })
+		await harness.run({ runId: 'run-1', task: 'go' })
+
+		const refusal = harness.events.find((event) => event.type === 'error' && event.kind === 'unverified_success')
+		expect(refusal).toBeDefined()
+		// The orchestrator was told exactly what to do next, in the conversation.
+		const last = harness.events.filter((event) => event.type === 'model_call')
+		expect(last.length).toBeGreaterThan(1)
+	})
+
+	test('the entry role reports success once a read-only role verified after the writer', async () => {
+		const blueprint = createTestBlueprint({
+			orchestrator: { tools: ['agent'], isolation: 'shared' },
+			coder: { tools: ['write_file'], isolation: 'worktree' },
+			reviewer: { tools: [], isolation: 'shared' },
+		})
+		const provider = createFakeProvider((request) => {
+			const system = systemOf(request)
+			if (system.includes('You are coder.')) {
+				return toolCallResponse([call('f', 'finish', { status: 'success', summary: 'wrote it' })])
+			}
+			if (system.includes('You are reviewer.')) {
+				return toolCallResponse([call('f', 'finish', { status: 'success', summary: 'checked it' })])
+			}
+			if (system.includes('You are orchestrator.')) {
+				const asked = request.messages.filter((message) => message.role === 'tool').length
+				if (asked === 0) return toolCallResponse([call('a1', 'agent', { role: 'coder', task: 'write the change' })])
+				if (asked === 1) return toolCallResponse([call('a2', 'agent', { role: 'reviewer', task: 'review it' })])
+				return toolCallResponse([call('f', 'finish', { status: 'success', summary: 'verified and done' })])
+			}
+			return toolCallResponse([call('f', 'finish', { status: 'success', summary: '?' })])
+		})
+
+		const harness = createRun({ blueprint, provider })
+		const result = await harness.run({ runId: 'run-1', task: 'go' })
+
+		expect(result.card.status).toBe('success')
+		expect(harness.events.some((event) => event.type === 'error' && event.kind === 'unverified_success')).toBe(false)
 	})
 })
