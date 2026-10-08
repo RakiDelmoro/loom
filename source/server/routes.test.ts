@@ -20,7 +20,7 @@ function post(pathname: string, body: unknown): ApiRequest {
 }
 
 function routes(service: RunService) {
-	return { service, prices: PRICES, defaultAutonomy: 'auto' as const }
+	return { service, prices: PRICES, defaultAutonomy: 'auto' as const, startBench: null, benchStatus: null }
 }
 
 describe('the API routes', () => {

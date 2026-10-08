@@ -7,7 +7,7 @@ import { startServer, type ServerDependencies } from './server.ts'
 
 function dependencies(overrides: { readonly fs?: FileSystem; readonly token?: string | null } = {}): ServerDependencies {
 	return {
-		routes: { service: createFakeRunService(), prices: {}, defaultAutonomy: 'auto' },
+		routes: { service: createFakeRunService(), prices: {}, defaultAutonomy: 'auto', startBench: null, benchStatus: null },
 		fs: overrides.fs ?? createMemoryFileSystem().fs,
 		staticRoot: '/ui',
 		token: overrides.token ?? null,
@@ -83,7 +83,7 @@ describe('the HTTP transport', () => {
 
 	test('a run is started over the wire and answers before it happens', async () => {
 		const service = createFakeRunService()
-		const deps: ServerDependencies = { ...dependencies(), routes: { service, prices: {}, defaultAutonomy: 'auto' } }
+		const deps: ServerDependencies = { ...dependencies(), routes: { service, prices: {}, defaultAutonomy: 'auto', startBench: null, benchStatus: null } }
 
 		await withServer(deps, async (url) => {
 			const response = await fetch(`${url}/api/runs`, {

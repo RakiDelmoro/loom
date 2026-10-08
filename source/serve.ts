@@ -12,6 +12,9 @@ import type { FileSystem } from './fs.ts'
 import { createRunStore } from './runs/store.ts'
 import { createRunLifecycle, processIsAlive, reconcileInterruptedRuns } from './runs/lifecycle.ts'
 import { runTask, generateRunId } from './run-task.ts'
+import * as path from 'node:path'
+import { runBench } from './run-bench.ts'
+import type { BenchmarkOutcome } from './bench/types.ts'
 import { createRunService } from './server/service.ts'
 import { startServer, defaultStaticRoot } from './server/server.ts'
 import { noRedaction } from './redact.ts'
@@ -21,6 +24,8 @@ import type { AutonomyLevel } from './runs/types.ts'
 
 export interface ServeOptions {
 	readonly repoPath: string
+	/** The benchmark suite directory the /api/bench endpoint runs. */
+	readonly suitePath: string
 	readonly blueprintPath: string
 	readonly deploymentPath: string
 	readonly hostname: string
@@ -79,9 +84,41 @@ export async function serve(options: ServeOptions): Promise<ServeHandle> {
 		},
 	})
 
+	// The suite runner the /api/bench endpoint drives. One at a time: two suites
+	// would race on the model endpoint's single slot and on the results file.
+	let benchRunning = false
+	let benchLast: unknown = null
+	const benchDefaults = {
+		suitePath: options.suitePath,
+		blueprintPath: options.blueprintPath,
+		deploymentPath: options.deploymentPath,
+		repetitions: 1,
+		keepWorkspaces: true,
+		resultsDirectory: path.join(options.repoPath, '.loom', 'bench'),
+		env: options.env,
+		fetch: options.fetch,
+		onOutcome: (outcome: BenchmarkOutcome) => options.write(`bench: ${outcome.benchmark} #${String(outcome.repetition)} ${outcome.status}\n`),
+	}
+	const startBench = (split: string): { readonly kind: 'ok' } | { readonly kind: 'failed'; readonly message: string } => {
+		if (benchRunning) return { kind: 'failed', message: 'a suite run is already in progress' }
+		if (split !== 'held-out' && split !== 'optimization') return { kind: 'failed', message: 'split must be "held-out" or "optimization"' }
+		benchRunning = true
+		void runBench({ ...benchDefaults, split })
+			.then((result) => {
+				benchLast = result
+				options.write(`bench: score ${(result.score * 100).toFixed(1)}% (${String(result.outcomes.length)} benchmarks)\n`)
+			})
+			.catch((error: unknown) => options.write(`bench failed: ${error instanceof Error ? error.message : String(error)}\n`))
+			.finally(() => {
+				benchRunning = false
+			})
+		return { kind: 'ok' }
+	}
+	const benchStatus = () => ({ running: benchRunning, last: benchLast })
+
 	const server = await startServer(
 		{
-			routes: { service, prices: deployment.prices, defaultAutonomy: options.autonomy },
+			routes: { service, prices: deployment.prices, defaultAutonomy: options.autonomy, startBench, benchStatus },
 			fs: options.fs,
 			staticRoot: defaultStaticRoot(),
 			token: options.token,

@@ -396,6 +396,7 @@ async function serveCommand(args: ParsedArguments): Promise<number> {
 		repoPath,
 		blueprintPath: resolveFileFlag(args.flags['blueprint'], repoPath, 'loom.json'),
 		deploymentPath: resolveFileFlag(args.flags['deployment'], repoPath, 'loom.deployment.json'),
+		suitePath: path.resolve(args.flags['suite'] === undefined || args.flags['suite'] === '' ? 'benchmarks' : args.flags['suite']),
 		hostname,
 		port,
 		token,

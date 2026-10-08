@@ -219,6 +219,7 @@ const serveOptions = {
 	repoPath: repo,
 	blueprintPath: path.join(repo, 'loom.json'),
 	deploymentPath: path.join(repo, 'loom.deployment.json'),
+	suitePath: path.join(repo, 'benchmarks'),
 	hostname: '127.0.0.1',
 	token: process.env['LOOM_TOKEN'] ?? null,
 	autonomy: 'auto' as const,

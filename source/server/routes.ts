@@ -27,11 +27,21 @@ export interface ApiResponse {
 	readonly body: unknown
 }
 
+export interface BenchStatus {
+	readonly running: boolean
+	/** The most recent completed suite result, or null while none has finished. */
+	readonly last: unknown
+}
+
 export interface RouteDependencies {
 	readonly service: RunService
 	readonly prices: Readonly<Record<string, ModelPrice>>
 	/** Default autonomy for a submitted run. */
 	readonly defaultAutonomy: AutonomyLevel
+	/** Starts a suite run in the background. Null when the host cannot run one. */
+	readonly startBench: ((split: string) => { readonly kind: 'ok' } | { readonly kind: 'failed'; readonly message: string }) | null
+	/** The bench's progress, for polling. Null when the host cannot run one. */
+	readonly benchStatus: (() => BenchStatus) | null
 }
 
 function json(status: number, body: unknown): ApiResponse {
@@ -46,6 +56,23 @@ function readString(body: unknown, key: string): string | null {
 	if (!isRecord(body)) return null
 	const value = body[key]
 	return typeof value === 'string' ? value : null
+}
+
+function benchRoute(request: ApiRequest, dependencies: RouteDependencies): ApiResponse {
+	if (dependencies.startBench === null || dependencies.benchStatus === null) {
+		return failure(501, 'this server was not started with a suite to run')
+	}
+	if (request.method === 'GET') return json(200, dependencies.benchStatus())
+	if (request.method === 'POST') {
+		const split = readString(request.body, 'split') ?? 'held-out'
+		if (split !== 'held-out' && split !== 'optimization') {
+			return failure(400, 'split must be "held-out" or "optimization"')
+		}
+		const started = dependencies.startBench(split)
+		if (started.kind !== 'ok') return failure(409, started.message)
+		return json(202, { started: true, split })
+	}
+	return failure(405, `${request.method} is not allowed on /api/bench`)
 }
 
 function readAutonomy(body: unknown, fallback: AutonomyLevel): AutonomyLevel {
@@ -66,6 +93,11 @@ export function handleApi(request: ApiRequest, dependencies: RouteDependencies):
 	// /api/health
 	if (segments.length === 2 && segments[1] === 'health') {
 		return json(200, { ok: true, activeRunId: service.active() })
+	}
+
+	// /api/bench — start a suite run, or read its progress.
+	if (segments.length === 2 && segments[1] === 'bench') {
+		return benchRoute(request, dependencies)
 	}
 
 	if (segments[1] !== 'runs') return failure(404, `no route for ${request.pathname}`)
