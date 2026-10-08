@@ -195,7 +195,16 @@ export function createScheduler(
 		let workspaceRoot = callerWorkspace
 		let worktree: CreatedWorktree | null = null
 		if (role.isolation === 'worktree') {
-			const worktreeResult = dependencies.worktrees.create(state.runId, agentId, state.baseSha)
+			// Branch from the caller, not from where the run began. The caller is
+			// carrying its other children's work, and a child that cannot see it
+			// re-does work that is already merged — then conflicts with the very
+			// commit it duplicated, which is how one benchmark became thirteen
+			// agents and two hundred model calls. An unreadable caller falls back to
+			// the run's base, which is the old behaviour and still correct for a root.
+			const fromCaller = dependencies.worktrees.headOf(callerWorkspace)
+			const base = fromCaller.kind === 'ok' ? fromCaller.value : state.baseSha
+
+			const worktreeResult = dependencies.worktrees.create(state.runId, agentId, base)
 			if (worktreeResult.kind !== 'ok') {
 				dependencies.events({ type: 'error', agentId, kind: 'worktree_failed', message: worktreeResult.message })
 				return errorCard('worktree_failed', worktreeResult.message)

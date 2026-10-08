@@ -44,6 +44,17 @@ export interface WorktreeManagerDependencies {
 export interface WorktreeManager {
 	/** Resolves a ref (e.g. `HEAD`) to a commit sha. */
 	resolveBaseSha(ref: string): OpResult<string>
+	/**
+	 * The commit a workspace is sitting on.
+	 *
+	 * A child branches from *here*, not from where the run started. The caller has
+	 * usually done something since it began — and so have its other children, whose
+	 * work it is carrying — so a child that branches from the run's base cannot see
+	 * any of it. That is not a smaller view of the work; it is a wrong one: a task
+	 * told to run the tests finds them failing, fixes a bug that is already fixed,
+	 * and commits a change that conflicts with the fix it duplicated.
+	 */
+	headOf(workspacePath: string): OpResult<string>
 	/** Creates an isolated worktree on its own branch, based on `baseSha`. */
 	create(runId: string, agentId: string, baseSha: string): OpResult<CreatedWorktree>
 	/** Commits the worktree's changes; `null` when there is nothing to commit. */
@@ -116,6 +127,12 @@ export function createWorktreeManager(
 		const listed = git.run(['worktree', 'list', '--porcelain'])
 		if (listed.kind !== 'ok') return { kind: 'failed', message: listed.message }
 		return { kind: 'ok', value: parseWorktreeList(listed.stdout) }
+	}
+
+	function headOf(workspacePath: string): OpResult<string> {
+		const head = git.run(['-C', workspacePath, 'rev-parse', 'HEAD'])
+		if (head.kind !== 'ok') return { kind: 'failed', message: head.message }
+		return { kind: 'ok', value: head.stdout.trim() }
 	}
 
 	function create(runId: string, agentId: string, baseSha: string): OpResult<CreatedWorktree> {
@@ -234,5 +251,5 @@ export function createWorktreeManager(
 		return { kind: 'ok', value: removedPaths }
 	}
 
-	return { resolveBaseSha, create, commit, integrate, remove, removeRun, list }
+	return { resolveBaseSha, headOf, create, commit, integrate, remove, removeRun, list }
 }

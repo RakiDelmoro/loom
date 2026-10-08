@@ -363,6 +363,36 @@ describe('createScheduler', () => {
 		expect(worktrees.committed).toEqual(['orchestrator-0-1'])
 	})
 
+	test('a child branches from its caller, not from where the run began', async () => {
+		// Work flows *up* the delegation tree: a child's branch is merged into its
+		// caller, so the caller is carrying its children's work. Nothing flowed
+		// down, though — every child branched from the run's base and could see
+		// none of it.
+		//
+		// A benchmark run showed what that costs. An agent told to *run the tests*
+		// found them failing, because the fix was on a branch it could not see. It
+		// fixed the bug again, committed that, and conflicted with the fix it had
+		// just duplicated. The caller answered the conflict with another agent,
+		// which did the same thing: thirteen agents and two hundred model calls on
+		// one file, none of it converging.
+		const blueprint = createTestBlueprint(
+			{ orchestrator: { tools: ['agent'], isolation: 'worktree' }, worker: { tools: [], isolation: 'worktree' } },
+			{ maxAgentDepth: 2 },
+		)
+		const provider = createFakeProvider((request) =>
+			sawToolResult(request)
+				? toolCallResponse([call('f', 'finish', { status: 'success', summary: 'done' })])
+				: toolCallResponse([call('d', 'agent', { role: 'worker', task: 'look at it' })]),
+		)
+		const worktrees = createFakeWorktrees({ baseSha: 'base0000', callerHead: 'callerhead' })
+
+		await createRun({ blueprint, provider, worktrees }).run({ runId: 'run-1', task: 'go' })
+
+		// The root is where the run pinned it; the child follows the caller, which
+		// has moved since.
+		expect(worktrees.createdFrom).toEqual(['orchestrator-0-1@base0000', 'worker-1-2@callerhead'])
+	})
+
 	test('an agent that changes nothing records no commit', async () => {
 		const blueprint = createTestBlueprint({ orchestrator: { tools: [] } })
 
