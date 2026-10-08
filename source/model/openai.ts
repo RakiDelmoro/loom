@@ -57,6 +57,11 @@ export function createOpenAiCompatibleProvider(options: OpenAiCompatibleOptions)
 
 			if (!response.ok) {
 				if (response.status === 429) return { kind: 'rate_limited', message: `HTTP 429: ${text}` }
+				// llama-server answers 500 when the model's tool call does not parse.
+				// The same request reproduces it, so it is reported rather than retried.
+				if (response.status === 500 && text.includes('Failed to parse tool call')) {
+					return { kind: 'tool_call_malformed', message: `HTTP 500: ${text}` }
+				}
 				return { kind: 'unavailable', message: `HTTP ${response.status}: ${text}` }
 			}
 

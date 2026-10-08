@@ -99,6 +99,16 @@ describe('createOpenAiCompatibleProvider', () => {
 		expect(result.message).toContain('500')
 	})
 
+	test('maps a parse-failure 500 to tool_call_malformed, not a retryable unavailable', async () => {
+		const provider = createOpenAiCompatibleProvider({
+			id: 'local',
+			baseUrl: 'http://localhost:8080/v1',
+			fetch: async () => new Response('{"error":"Failed to parse tool call arguments as JSON"}', { status: 500 }),
+		})
+		const result = await provider.chat(request)
+		expect(result.kind).toBe('tool_call_malformed')
+	})
+
 	test('maps a transport failure to an unavailable result rather than throwing', async () => {
 		const provider = createOpenAiCompatibleProvider({
 			id: 'local',

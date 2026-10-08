@@ -68,6 +68,12 @@ export type ChatResult =
 	| { readonly kind: 'timeout'; readonly message: string }
 	| { readonly kind: 'rate_limited'; readonly message: string }
 	| { readonly kind: 'invalid_response'; readonly message: string }
+	/**
+	 * The endpoint could not parse the tool call the model wrote, typically
+	 * because it was cut off mid-argument. Asking again sends the same request,
+	 * so it is not retryable.
+	 */
+	| { readonly kind: 'tool_call_malformed'; readonly message: string }
 
 export interface Provider {
 	readonly id: string

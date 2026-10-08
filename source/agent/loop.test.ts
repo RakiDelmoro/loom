@@ -297,11 +297,11 @@ describe('runAgentLoop', () => {
 	})
 
 	test('a provider failure is retried, and the role carries on when the endpoint recovers', async () => {
-		// A local server 500s on a tool call it cannot parse; a provider rate-limits.
-		// A role that gave up on the first hiccup would make autonomy impossible.
+		// A provider rate-limits or drops a connection; a role that gave up on the
+		// first hiccup would make autonomy impossible.
 		const provider = createFakeProvider([
-			{ kind: 'unavailable', message: 'HTTP 500: failed to parse tool call arguments' },
-			{ kind: 'unavailable', message: 'HTTP 500: failed to parse tool call arguments' },
+			{ kind: 'unavailable', message: 'HTTP 503: busy' },
+			{ kind: 'unavailable', message: 'HTTP 503: busy' },
 			toolCallResponse([call('f', 'finish', { status: 'success', summary: 'recovered' })]),
 		])
 		const events: RunEvent[] = []
@@ -310,6 +310,16 @@ describe('runAgentLoop', () => {
 		expect(outcome.card.status).toBe('success')
 		expect(outcome.card.summary).toBe('recovered')
 		expect(events.filter((event) => event.type === 'model_retry').map((event) => event.attempt)).toEqual([1, 2])
+	})
+
+	test('a tool call the endpoint cannot parse fails at once, because asking again repeats it', async () => {
+		const provider = createFakeProvider(() => ({ kind: 'tool_call_malformed', message: 'HTTP 500: Failed to parse tool call' }))
+		const events: RunEvent[] = []
+		const outcome = await runAgentLoop({ ...dependencies(provider), events: (event) => void events.push(event) }, request)
+
+		expect(outcome.card.status).toBe('error')
+		expect(outcome.card.error?.kind).toBe('tool_call_malformed')
+		expect(events.filter((event) => event.type === 'model_retry')).toHaveLength(0)
 	})
 
 	test('a provider failure that keeps failing ends the role, bounded', async () => {
