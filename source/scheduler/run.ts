@@ -28,7 +28,6 @@ import type { CreatedWorktree, WorktreeManager } from '../workspace/worktree.ts'
 import { createLimitedProvider, createPool } from './pool.ts'
 import type { AgentNode, RunResult } from './types.ts'
 
-const MAX_TURNS_PER_ROLE = 24
 
 export interface SchedulerDependencies {
 	readonly providers: ProviderRegistry
@@ -252,6 +251,7 @@ export function createScheduler(
 				now: dependencies.now,
 				monotonicNow: dependencies.monotonicNow,
 				sleep: dependencies.sleep,
+				loopCheck: blueprint.budgets.loopCheck ?? null,
 			},
 			{
 				agentId,
@@ -261,8 +261,8 @@ export function createScheduler(
 				toolSpecs: toolSpecsFor(role),
 				allowedTools: role.tools,
 				workspaceRoot,
-				maxTurns: MAX_TURNS_PER_ROLE,
 				maxChildren: role.maxChildren,
+				loopCheckExempt: blueprint.budgets.loopCheck?.handlerRole === roleName,
 			},
 		)
 

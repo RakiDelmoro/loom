@@ -12,7 +12,7 @@
  * and `finish` ends the role.
  */
 
-import type { RoutingProfile } from '../blueprint/types.ts'
+import type { LoopCheck, RoutingProfile } from '../blueprint/types.ts'
 import { isRecord } from '../guards.ts'
 import type { ChatResult, Message, Provider, ToolCall, ToolSpec, Usage } from '../model/types.ts'
 import type { RunControl } from '../runs/control.ts'
@@ -60,6 +60,11 @@ export interface AgentLoopDependencies {
 	readonly monotonicNow: () => number
 	/** Waits, for the backoff between attempts. Injected so tests do not wait. */
 	readonly sleep: (milliseconds: number) => Promise<void>
+	/**
+	 * The loop detector's cadence, from the Blueprint. `null` means the Blueprint
+	 * has no detector, so the engine never checks.
+	 */
+	readonly loopCheck: LoopCheck | null
 }
 
 export interface AgentLoopRequest {
@@ -72,9 +77,13 @@ export interface AgentLoopRequest {
 	/** The tool names this role may call. A call outside this list is refused. */
 	readonly allowedTools: readonly string[]
 	readonly workspaceRoot: string
-	readonly maxTurns: number
 	/** How many `agent` calls this role may have in flight at once. */
 	readonly maxChildren: number
+	/**
+	 * The loop-check handler is exempt from the cadence: a handler that triggered
+	 * checks on itself would recurse into itself. Undefined means not exempt.
+	 */
+	readonly loopCheckExempt?: boolean
 }
 
 interface ToolCallOutcome {
@@ -101,8 +110,16 @@ export async function runAgentLoop(
 	let turns = 0
 	/** How many times the role has been told it must call `finish` rather than going quiet. */
 	let nudges = 0
+	/** Tool calls and output tokens since the last loop-check cadence crossing. */
+	let toolCallsSinceCheck = 0
+	let outputSinceCheck = 0
+	/** The pressure notice fires once per role; the conversation only grows. */
+	let contextNoticeSent = false
 
-	while (turns < request.maxTurns) {
+	// No turn cap. A role runs until it calls `finish`, or until the loop detector
+	// or the deployment container stops it: a fixed count fires on healthy
+	// long-horizon work long before the context window fills.
+	for (;;) {
 		turns += 1
 
 		// The safe point. A held run waits here, and anything the operator sent
@@ -153,11 +170,19 @@ export async function runAgentLoop(
 		const callFinishedAt = dependencies.monotonicNow()
 
 		if (result.kind !== 'success') {
+			// A prompt the window cannot hold will never succeed on retry: the role
+			// is finished with the kind the parent's recovery logic routes on.
+			const contextOverflow = result.kind === 'context_exceeded'
 			return settle(
 				{
 					status: 'error',
-					summary: `the model could not be reached: ${result.message}`,
-					error: { kind: result.kind, message: result.message },
+					summary: contextOverflow
+						? 'the conversation no longer fits the model context window'
+						: `the model could not be reached: ${result.message}`,
+					error: {
+						kind: contextOverflow ? 'context_budget_exceeded' : result.kind,
+						message: result.message,
+					},
 				},
 				turns,
 				usage,
@@ -176,6 +201,29 @@ export async function runAgentLoop(
 			// sub-millisecond precision is not something the record claims to carry.
 			durationMs: Math.round(callFinishedAt - callStartedAt),
 		})
+
+		// Context pressure. The endpoint's own reported usage is the only truth —
+		// the engine estimates nothing. Past the threshold, a one-shot notice asks
+		// the role to wrap up and hand off while requests still succeed; the parent
+		// re-delegates a fresh instance with the brief.
+		const window = request.profile.contextWindow
+		const pressure = request.profile.contextPressure ?? 0.8
+		if (window !== undefined && !contextNoticeSent && result.response.usage.inputTokens >= window * pressure) {
+			contextNoticeSent = true
+			dependencies.events({
+				type: 'context_pressure',
+				agentId: request.agentId,
+				inputTokens: result.response.usage.inputTokens,
+				contextWindow: window,
+			})
+			messages.push({
+				role: 'user',
+				content:
+					`[Context pressure] This conversation has reached ${String(result.response.usage.inputTokens)} of about ${String(window)} tokens. ` +
+					'Stop starting new work. Call `finish` with status "error", error.kind "context_handoff", and a summary that is a handoff brief: ' +
+					'what is done, what remains, the key file paths, and the immediate next step. A fresh instance will replace you and continue from it.',
+			})
+		}
 
 		// A reply cut off at the output cap is not a usable answer, even when the
 		// tool call inside it parsed. It is refused as a typed error rather than
@@ -254,20 +302,52 @@ export async function runAgentLoop(
 		for (const [index, call] of toolCalls.entries()) {
 			messages.push({ role: 'tool', toolCallId: call.id, content: results[index] ?? '' })
 		}
-	}
 
-	return settle(
-		{
-			status: 'error',
-			summary: `the role did not finish within ${String(request.maxTurns)} turns`,
-			error: { kind: 'turn_limit', message: 'the role reached its turn limit without finishing' },
-		},
-		turns,
-		usage,
-		startedAt,
-		dependencies.now(),
-	)
+		// The loop detector. With no turn limit, a stuck role would spin forever,
+		// so on the cadence the engine asks the handler role to judge the recent
+		// work; a `loop_detected` verdict ends this role with that card.
+		if (dependencies.loopCheck !== null && request.loopCheckExempt !== true) {
+			toolCallsSinceCheck += toolCalls.length
+			outputSinceCheck += result.response.usage.outputTokens
+			if (toolCallsSinceCheck >= dependencies.loopCheck.everyToolCalls || outputSinceCheck >= dependencies.loopCheck.everyTokens) {
+				toolCallsSinceCheck = 0
+				outputSinceCheck = 0
+				const verdict = await dependencies.delegate({
+					role: dependencies.loopCheck.handlerRole,
+					task: loopCheckTask(request, toolCalls),
+				})
+				dependencies.events({
+					type: 'loop_check',
+					agentId: request.agentId,
+					handler: dependencies.loopCheck.handlerRole,
+					verdict: verdict.status === 'error' && verdict.error?.kind === 'loop_detected' ? 'loop_detected' : 'continue',
+					summary: verdict.summary,
+				})
+				if (verdict.status === 'error' && verdict.error?.kind === 'loop_detected') {
+					return settle(verdict, turns, usage, startedAt, dependencies.now())
+				}
+			}
+		}
+	}
 }
+
+/**
+ * The handler's briefing: what the target was asked, and its tool-call trace —
+ * the handler reads nothing else, so the trace must name the tools and their
+ * shape. Repeated identical calls are the loop signature.
+ */
+function loopCheckTask(request: AgentLoopRequest, recentCalls: readonly ToolCall[]): string {
+	const calls = recentCalls.map((callItem) => `${callItem.name}(${callItem.arguments.slice(0, 120)})`).join('\n')
+	return [
+		`Role "${request.agentId}" may be stuck in a loop. Its task: ${request.task}`,
+		'Its most recent tool calls:',
+		calls,
+		'Decide whether this role is making progress or repeating itself.',
+		'If it repeats without progress, call finish with status "error" and error.kind "loop_detected".',
+		'If it is making progress, call finish with status "success" and a one-line summary.',
+	].join('\n')
+}
+
 
 /**
  * Runs the turn's tool calls and returns one serialized result per call, in the

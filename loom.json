@@ -289,6 +289,19 @@
 				"friendly": "Recovery",
 				"whimsical": "Fixer"
 			}
+		},
+		"loop_detector": {
+			"prompt": "prompts/loop_detector.md",
+			"model": "reasoner",
+			"tools": [
+				"finish"
+			],
+			"isolation": "shared",
+			"label": {
+				"detailed": "Loop Detector",
+				"friendly": "Loop Detector",
+				"whimsical": "Pattern Watcher"
+			}
 		}
 	},
 	"tools": [
@@ -312,19 +325,28 @@
 			"provider": "local",
 			"model": "qwen3.5-9b-heretic-v2",
 			"temperature": 0.2,
-			"maxTokens": 16384
+			"maxTokens": 16384,
+			"contextWindow": 32768,
+			"contextPressure": 0.8
 		},
 		"worker": {
 			"provider": "local",
 			"model": "qwen3.5-9b-heretic-v2",
 			"temperature": 0.1,
-			"maxTokens": 16384
+			"maxTokens": 16384,
+			"contextWindow": 32768,
+			"contextPressure": 0.8
 		}
 	},
 	"budgets": {
 		"maxAgentDepth": 6,
 		"maxConcurrentAgents": 8,
-		"toolTimeoutSeconds": 60
+		"toolTimeoutSeconds": 60,
+		"loopCheck": {
+			"handlerRole": "loop_detector",
+			"everyToolCalls": 16,
+			"everyTokens": 30000
+		}
 	},
 	"permissions": {
 		"mode": "workspace-write",

@@ -231,9 +231,11 @@ describe('createScheduler', () => {
 		})
 
 		const provider = createFakeProvider((request) => {
-			// The worker never finishes, so it hits its turn limit and ends in error —
-			// with work committed, which is exactly the shape the reproduction had.
-			if (systemOf(request).includes('worker')) return toolCallResponse([call('w', 'echo', {})])
+			// The worker finishes with an error and no summary of real work — the same
+			// shape the reproduction had: a failed role with work committed.
+			if (systemOf(request).includes('worker')) {
+				return toolCallResponse([call('w', 'finish', { status: 'error', summary: 'gave up' })])
+			}
 			if (!sawToolResult(request)) return toolCallResponse([call('c', 'agent', { role: 'worker', task: 'work' })])
 			return toolCallResponse([call('f', 'finish', { status: 'success', summary: 'done' })])
 		})

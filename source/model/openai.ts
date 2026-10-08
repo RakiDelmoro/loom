@@ -57,6 +57,11 @@ export function createOpenAiCompatibleProvider(options: OpenAiCompatibleOptions)
 
 			if (!response.ok) {
 				if (response.status === 429) return { kind: 'rate_limited', message: `HTTP 429: ${text}` }
+				// The prompt does not fit the endpoint's context window. Retrying sends
+				// the same oversized request, so it is reported rather than retried.
+				if (response.status === 400 && text.includes('exceed_context_size_error')) {
+					return { kind: 'context_exceeded', message: `HTTP 400: ${text}` }
+				}
 				// llama-server answers 500 when the model's tool call does not parse.
 				// The same request reproduces it, so it is reported rather than retried.
 				if (response.status === 500 && text.includes('Failed to parse tool call')) {

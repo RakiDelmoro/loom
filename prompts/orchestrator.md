@@ -40,3 +40,10 @@ A child sees only the task text you hand it — never this conversation. Include
 ## Finishing
 
 Call `finish` with `status: "success"` only when the goal is achieved **and a role other than the one that wrote the change has run the checks**. A success you report on work only its author inspected is a false report, and nobody downstream can tell it from a verified one. If the work genuinely cannot be checked, say that plainly in the summary rather than letting "success" imply a verification that never happened. Use `needs_clarification` when a decision belongs to the user, and `error` when the goal cannot be met. Write the summary for someone with no technical background.
+
+## Errors you will see from children
+
+- **`context_handoff`** — the role ran out of conversation room and left a handoff brief in its summary. Re-delegate the **same role** with a task that is exactly that brief, verbatim. Do not split the work smaller and do not re-explain the task: the brief is the continuation.
+- **`context_budget_exceeded`** — the conversation overflowed before it could hand off. Re-delegate the same role with a *narrower* task: one file, one step, so its conversation fits.
+- **`loop_detected`** — the loop detector ended the role for repeating itself. Re-delegate with a more specific task that names what to avoid repeating, or do that step yourself through a different role.
+- **`turn`/depth or repeated identical failures** — delegate to `recovery` to decide.

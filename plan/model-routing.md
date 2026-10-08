@@ -114,7 +114,7 @@ What actually bounds a runaway run is structural, not financial:
 | Bound | What it limits |
 |---|---|
 | `budgets.maxAgentDepth` | Recursion — a tree cannot grow deeper than this. |
-| The per-role turn limit | A single role cannot spin forever. |
+| `budgets.loopCheck` | A role that repeats itself is ended by the handler role with `loop_detected`. |
 | `budgets.toolTimeoutSeconds` | A hung tool is aborted. |
 | The deployment container | The outer boundary: `docker stop` ends a pathological run. |
 

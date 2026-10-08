@@ -74,6 +74,11 @@ export type ChatResult =
 	 * so it is not retryable.
 	 */
 	| { readonly kind: 'tool_call_malformed'; readonly message: string }
+	/**
+	 * The prompt does not fit the endpoint's context window. Asking again sends
+	 * the same oversized request, so it is not retryable.
+	 */
+	| { readonly kind: 'context_exceeded'; readonly message: string }
 
 export interface Provider {
 	readonly id: string

@@ -72,7 +72,7 @@ Nothing is inferred from prose. The manifest and the event log are the record.
 
 - **Concurrent DAG, not a depth-first tree.** Fan-out/fan-in with a bounded pool; stable result ordering.
 - **Single-flight per worktree.** A worktree has exactly one owner at a time, enforced structurally. This is what makes concurrency safe — the reference implementation is sequential *because* it shares one working tree.
-- **Bounded depth.** `maxAgentDepth` bounds recursion, and each role has a turn limit. Spend is measured but never enforced — see [model-routing.md](model-routing.md) "Spend visibility, not enforcement".
+- **Bounded depth.** `maxAgentDepth` bounds recursion, and `budgets.loopCheck` lets a handler role end a role that repeats itself (`loop_detected`). There is no per-role turn cap — a fixed count fires on healthy long-horizon work long before the context window fills. Spend is measured but never enforced — see [model-routing.md](model-routing.md) "Spend visibility, not enforcement".
 - **Determinism.** Given the same Blueprint, base ref, and scripted provider, a run produces the same manifest — except for timestamps and commit shas.
 - **A role is told where it is working.** Every role's system prompt ends with its workspace root, that it is a git repository, that tool paths resolve against it and `run_shell` starts there, and that the engine commits — not the role. This is the one fact a model cannot infer, and without it a role recites a path from its training data: a run spent thirty of its fifty-eight shell commands discovering that `/testbed` and a Windows desktop path do not exist.
 

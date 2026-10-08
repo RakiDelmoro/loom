@@ -96,7 +96,7 @@ Milestones are sequential: the isolation primitive must exist before the engine 
 
 1. **Provider registry** — named providers with endpoints and credentials from the deployment file/environment, never the Blueprint.
 2. **Cost accounting** — per-model prices; per-call, per-agent, and per-run token and dollar totals, with a per-model breakdown, recorded in the manifest.
-3. **Spend visibility, never enforcement** — an optional `alerts` threshold emits an event and nothing else. No run is stopped over money; `maxAgentDepth`, the per-role turn limit, the tool timeout, and the deployment container are what bound a runaway run.
+3. **Spend visibility, never enforcement** — an optional `alerts` threshold emits an event and nothing else. No run is stopped over money; `maxAgentDepth`, `budgets.loopCheck`, the tool timeout, and the deployment container are what bound a runaway run.
 4. **Per-run overrides** — `--model-override role=profile`.
 
 **Acceptance criteria.**

@@ -32,6 +32,7 @@ import type {
 	BlueprintFile,
 	Budgets,
 	IsolationMode,
+	LoopCheck,
 	Permissions,
 	PermissionMode,
 	RoleDefinition,
@@ -46,8 +47,9 @@ const PERMISSION_MODES = ['read-only', 'workspace-write', 'full'] as const
 const BLUEPRINT_KEYS = ['entryRole', 'roles', 'tools', 'routing', 'budgets', 'alerts', 'permissions', 'visualization'] as const
 const ROLE_KEYS = ['prompt', 'model', 'tools', 'isolation', 'parallel', 'styleGuide', 'label', 'description', 'workingLabel'] as const
 const PARALLEL_KEYS = ['maxChildren'] as const
-const ROUTING_KEYS = ['provider', 'model', 'temperature', 'maxTokens'] as const
-const BUDGET_KEYS = ['maxAgentDepth', 'maxConcurrentAgents', 'toolTimeoutSeconds'] as const
+const ROUTING_KEYS = ['provider', 'model', 'temperature', 'maxTokens', 'contextWindow', 'contextPressure'] as const
+const BUDGET_KEYS = ['maxAgentDepth', 'maxConcurrentAgents', 'toolTimeoutSeconds', 'loopCheck'] as const
+const LOOP_CHECK_KEYS = ['handlerRole', 'everyToolCalls', 'everyTokens'] as const
 const ALERT_KEYS = ['costUsd', 'tokens'] as const
 const PERMISSION_KEYS = ['mode', 'requireApproval', 'egress'] as const
 const MANIFEST_KEYS = ['name', 'description', 'parameters'] as const
@@ -103,16 +105,40 @@ function parseRoutingProfile(value: unknown, path: string): RoutingProfile {
 		model: expectNonEmptyString(record['model'], `${path}.model`),
 		temperature: expectNumber(record['temperature'], `${path}.temperature`),
 		...(record['maxTokens'] !== undefined ? { maxTokens: expectPositiveInteger(record['maxTokens'], `${path}.maxTokens`) } : {}),
+		...(record['contextWindow'] !== undefined
+			? { contextWindow: expectPositiveInteger(record['contextWindow'], `${path}.contextWindow`) }
+			: {}),
+		...(record['contextPressure'] !== undefined
+			? { contextPressure: expectContextPressure(record['contextPressure'], `${path}.contextPressure`) }
+			: {}),
 	}
+}
+
+/** A pressure threshold is a fraction of the context window: strictly between 0 and 1. */
+function expectContextPressure(value: unknown, path: string): number {
+	const parsed = expectNumber(value, path)
+	if (parsed <= 0 || parsed >= 1) fail(path, 'expected a number strictly between 0 and 1')
+	return parsed
 }
 
 function parseBudgets(value: unknown, path: string): Budgets {
 	const record = expectRecord(value, path)
 	rejectUnknownKeys(record, BUDGET_KEYS, path)
+	let loopCheck: LoopCheck | undefined
+	if (record['loopCheck'] !== undefined) {
+		const loop = expectRecord(record['loopCheck'], `${path}.loopCheck`)
+		rejectUnknownKeys(loop, LOOP_CHECK_KEYS, `${path}.loopCheck`)
+		loopCheck = {
+			handlerRole: expectNonEmptyString(loop['handlerRole'], `${path}.loopCheck.handlerRole`),
+			everyToolCalls: expectPositiveInteger(loop['everyToolCalls'], `${path}.loopCheck.everyToolCalls`),
+			everyTokens: expectPositiveInteger(loop['everyTokens'], `${path}.loopCheck.everyTokens`),
+		}
+	}
 	return {
 		maxAgentDepth: expectPositiveInteger(record['maxAgentDepth'], `${path}.maxAgentDepth`),
 		maxConcurrentAgents: expectPositiveInteger(record['maxConcurrentAgents'], `${path}.maxConcurrentAgents`),
 		toolTimeoutSeconds: expectPositiveInteger(record['toolTimeoutSeconds'], `${path}.toolTimeoutSeconds`),
+		...(loopCheck !== undefined ? { loopCheck } : {}),
 	}
 }
 
@@ -207,9 +233,9 @@ export function validateBlueprint(file: BlueprintFile, manifests: readonly ToolM
 		for (const [index, tool] of role.tools.entries()) {
 			if (!declaredTools.has(tool)) fail(`${path}.roles.${name}.tools[${index}]`, `tool "${tool}" is not declared in tools`)
 		}
-		// A role that cannot finish can only be stopped by its turn limit, which
-		// burns the whole run. The grant list is enforced at call time, so this
-		// has to be checked here rather than discovered later.
+		// A role that cannot finish can only be stopped by the loop detector or the
+		// container. The grant list is enforced at call time, so this has to be
+		// checked here rather than discovered later.
 		if (!role.tools.includes('finish')) {
 			fail(`${path}.roles.${name}.tools`, 'every role must be granted "finish"')
 		}
@@ -219,5 +245,10 @@ export function validateBlueprint(file: BlueprintFile, manifests: readonly ToolM
 		if (!declaredTools.has(tool)) {
 			fail(`${path}.permissions.requireApproval[${index}]`, `tool "${tool}" is not declared in tools`)
 		}
+	}
+
+	// The detector names a role, so a dangling name would disable it, silently.
+	if (file.budgets.loopCheck !== undefined && file.roles[file.budgets.loopCheck.handlerRole] === undefined) {
+		fail(`${path}.budgets.loopCheck.handlerRole`, `loop-check handler "${file.budgets.loopCheck.handlerRole}" is not defined in roles`)
 	}
 }

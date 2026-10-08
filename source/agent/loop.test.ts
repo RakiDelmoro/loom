@@ -18,7 +18,6 @@ const request: AgentLoopRequest = {
 	toolSpecs: [],
 	allowedTools: ['echo', 'boom', 'ghost', 'agent', 'finish'],
 	workspaceRoot: '/repo',
-	maxTurns: 5,
 	maxChildren: 2,
 }
 
@@ -33,6 +32,7 @@ function dependencies(provider: Provider, tools: ToolRegistry = createToolRegist
 		now: createCounterClock(),
 		monotonicNow: createCounterClock(),
 		sleep: async () => {},
+		loopCheck: null,
 	}
 }
 
@@ -217,6 +217,7 @@ describe('runAgentLoop', () => {
 			now: createCounterClock(),
 			monotonicNow: createCounterClock(),
 			sleep: async () => {},
+			loopCheck: null,
 		}
 
 		await runAgentLoop(deps, request)
@@ -246,6 +247,7 @@ describe('runAgentLoop', () => {
 			now: createCounterClock(),
 			monotonicNow: createCounterClock(),
 			sleep: async () => {},
+			loopCheck: null,
 		}
 
 		await runAgentLoop(deps, { ...request, maxChildren: 2 })
@@ -273,6 +275,7 @@ describe('runAgentLoop', () => {
 				now: () => (wall -= 5_000),
 				monotonicNow: () => (monotonic += 7),
 				sleep: async () => {},
+			loopCheck: null,
 				events: (event) => events.push(event),
 			},
 			request,
@@ -366,17 +369,6 @@ describe('runAgentLoop', () => {
 		expect(outcome.card.summary).toBe('done')
 	})
 
-	test('a role that never finishes hits its turn limit', async () => {
-		const tools = createToolRegistry([{ name: 'echo', run: async () => ({ kind: 'success', data: null }) }])
-		const provider = createFakeProvider(() => toolCallResponse([call('c', 'echo', {})]))
-
-		const outcome = await runAgentLoop(dependencies(provider, tools), { ...request, maxTurns: 3 })
-
-		expect(outcome.turns).toBe(3)
-		expect(outcome.card.status).toBe('error')
-		expect(outcome.card.error?.kind).toBe('turn_limit')
-	})
-
 	test('accumulates token usage across turns', async () => {
 		const provider = createFakeProvider([
 			toolCallResponse([call('f', 'finish', { status: 'success', summary: 'done' })]),
@@ -418,6 +410,7 @@ describe('runAgentLoop', () => {
 				now: createCounterClock(),
 				monotonicNow: createCounterClock(),
 				sleep: async () => {},
+			loopCheck: null,
 			},
 			{ ...request, allowedTools: ['write_file', 'finish'] },
 		)

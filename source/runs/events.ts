@@ -98,6 +98,20 @@ export type RunEvent =
 	  }
 	| { readonly type: 'error'; readonly agentId: string; readonly kind: string; readonly message: string }
 	| {
+			readonly type: 'loop_check'
+			readonly agentId: string
+			readonly handler: string
+			/** The handler's verdict: the role loops, or the role continues. */
+			readonly verdict: 'loop_detected' | 'continue'
+			readonly summary: string
+	  }
+	| {
+			readonly type: 'context_pressure'
+			readonly agentId: string
+			readonly inputTokens: number
+			readonly contextWindow: number
+	  }
+	| {
 			/** A message the operator injected into a running role's conversation. */
 			readonly type: 'operator_notice'
 			readonly agentId: string

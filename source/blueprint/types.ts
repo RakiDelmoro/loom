@@ -50,6 +50,13 @@ export interface RoutingProfile {
 	readonly model: string
 	readonly temperature: number
 	readonly maxTokens?: number
+	/** The endpoint's context window, in tokens. Drives the pressure trigger. */
+	readonly contextWindow?: number
+	/**
+	 * Fraction of the window at which a role is told to hand off. Must be in
+	 * (0, 1) when `contextWindow` is set. Defaults to 0.8.
+	 */
+	readonly contextPressure?: number
 }
 
 /** Limits the engine **enforces**. */
@@ -57,6 +64,19 @@ export interface Budgets {
 	readonly maxAgentDepth: number
 	readonly maxConcurrentAgents: number
 	readonly toolTimeoutSeconds: number
+	/**
+	 * The loop detector: every `everyToolCalls` tool calls or `everyTokens` output
+	 * tokens, the engine asks `handlerRole` whether the role is stuck. A handler
+	 * verdict of `loop_detected` ends the role. Absent, there is no detector.
+	 */
+	readonly loopCheck?: LoopCheck
+}
+
+export interface LoopCheck {
+	/** The role that judges a possible loop. It sees the target's tool-call trace. */
+	readonly handlerRole: string
+	readonly everyToolCalls: number
+	readonly everyTokens: number
 }
 
 /**

@@ -95,7 +95,7 @@ scheduler
   ├─ maxConcurrentAgents (run-wide ceiling)
   ├─ per-role parallel.maxChildren (fan-out ceiling for one parent)
   ├─ maxAgentDepth (recursion ceiling)
-  └─ per-role turn limit (a role cannot spin forever)
+  └─ budgets.loopCheck (a handler role ends a role that repeats itself)
 ```
 
 **Fan-out.** When a role calls `agent`, it may pass several tasks; up to `parallel.maxChildren` start immediately, the rest queue. The call returns when all have joined.
