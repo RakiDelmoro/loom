@@ -1,5 +1,5 @@
 {
-	"suitePath": "benchmarks",
+	"suitePath": "benchmarks-v2",
 	"guildPath": ".",
 	"deploymentPath": "loom.deployment.json",
 
