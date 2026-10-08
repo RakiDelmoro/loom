@@ -34,6 +34,25 @@ The component names are deliberate.
 
 A **benchmark** is one task; the **Bench** is the thing that runs them all.
 
+## The roster
+
+A run is a team of sixteen roles, and the whole team is data in
+[`loom.json`](loom.json). Seven carry the work: an `orchestrator` that owns the
+goal and never opens a file, a `planner` and a `researcher` that read, a `coder`
+that writes, a `tester` that runs the work, a `reviewer` that checks it against
+the task, and a `documenter` that keeps the docs true.
+
+Four lead/reviewer pairs carry the judgement one pass cannot — `architecture`,
+`style`, `security`, and `acceptance`. A lead holds only `agent` and `finish`: it
+directs its reviewer, sends each confirmed finding to a `coder`, and re-reviews
+until the finding is gone or disproven. A reviewer is granted no mutating tool,
+by construction — it reports, and it cannot fix its way past what it was meant to
+find. `recovery` decides what to do after a failure.
+
+The `agent` tool names the roster to the model, so a delegation goes to a role
+that exists. Swap the Blueprint and you swap the team; the engine never learns
+what a "coder" is.
+
 ## Run it
 
 ```bash
@@ -62,18 +81,3 @@ unshipped behavior is a bug.
 
 Read [`AGENTS.md`](AGENTS.md) before changing anything, and
 [`CONTRIBUTING.md`](CONTRIBUTING.md) for setup and conventions.
-
-## On prior art
-
-The concept — orchestrating a small model into a network of specialized roles —
-is not original, and the field is crowded. The reference implementation
-([`Zoltu/orchestration-builder`](https://github.com/Zoltu/orchestration-builder))
-has the concept and a strong design. It **shipped a bench** — nine benchmarks
-and a validation runner, with the same `pass` / `fail` / `error` trichotomy — but
-scored it **pass/fail only**: no interval, no held-out split, no cost. It
-*refused* parallelism, worktrees, and per-task isolation, and left its optimizer
-as a design document rather than a program.
-
-**Loom is built on those gaps** — not on *a* bench, which the reference had, but
-on a bench that **discriminates** — and on the conviction that the scoreboard has
-to come before the loop that optimizes it.
