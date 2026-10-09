@@ -23,6 +23,9 @@ export interface OpenAiCompatibleOptions {
 	readonly fetch: FetchLike
 }
 
+/** Whole-call bound for one model request: queue wait on a one-slot server plus full generation. */
+const MODEL_CALL_TIMEOUT_MS = 15 * 60 * 1000
+
 export function createOpenAiCompatibleProvider(options: OpenAiCompatibleOptions): Provider {
 	const endpoint = `${options.baseUrl.replace(/\/+$/, '')}/chat/completions`
 
@@ -32,11 +35,17 @@ export function createOpenAiCompatibleProvider(options: OpenAiCompatibleOptions)
 	return {
 		id: options.id,
 		async chat(request: ChatRequest): Promise<ChatResult> {
+			// An explicit bound on the whole call. Without one, the fetch layer's
+			// default decides — and its default is shorter than a queued 32k-token
+			// generation on a one-slot server, so loaded deployments abort calls
+			// that would have succeeded. Fifteen minutes covers a full queue wait
+			// plus generation; a genuinely dead endpoint still cannot hang a run.
+			const timeoutSignal = AbortSignal.timeout(MODEL_CALL_TIMEOUT_MS)
 			const init: RequestInit = {
 				method: 'POST',
 				headers,
 				body: JSON.stringify(buildRequestBody(request)),
-				...(request.signal !== undefined ? { signal: request.signal } : {}),
+				...(request.signal !== undefined ? { signal: request.signal } : { signal: timeoutSignal }),
 			}
 
 			let response: Response
