@@ -45,6 +45,12 @@ export function createOpenAiCompatibleProvider(options: OpenAiCompatibleOptions)
 				method: 'POST',
 				headers,
 				body: JSON.stringify(buildRequestBody(request)),
+				// Bun's fetch carries an internal 300-second default that AbortSignal
+				// does NOT override (verified: a 15-minute signal still dies at ~5.5
+				// minutes). `timeout: false` removes it; the AbortSignal above is then
+				// the only bound, and it is generous enough for slow generation.
+				// Bun-specific field, absent from the standard RequestInit type.
+				...({ timeout: false } as Record<string, unknown>),
 				...(request.signal !== undefined ? { signal: request.signal } : { signal: timeoutSignal }),
 			}
 
