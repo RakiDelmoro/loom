@@ -124,6 +124,24 @@ An optional `alerts` block in the Blueprint can name a dollar or token threshold
 
 ---
 
+## 4a. Sizing `maxConcurrentAgents` to the endpoint
+
+`maxConcurrentAgents` is a **deployment** property, not a Blueprint ambition: it must
+match how many requests the endpoint can actually generate at once. The executor
+discovers `total_slots` from the endpoint's `/props` (llama-server exposes it) — set
+the budget to that number, not to a wish.
+
+A budget above the real slot count does not speed anything up: requests queue on the
+server, and a client-side fetch timeout kills queued calls mid-wait, which turns
+loaded runs into retry livelocks (observed: 2.5 hours of a coder's run spent
+time-out → re-queue → time-out on a one-slot server under an 8-way budget).
+
+One-slot deployments (a single 9B quantized model on one GPU) therefore run with
+`maxConcurrentAgents: 1`. The Blueprint's parallel structure — fan-out, per-role
+ceilings, worktree isolation — is unchanged; only the wall-clock overlap waits for
+hardware that can honor it. On a multi-slot or API-backed deployment, raise the
+budget to the slot count and the same Blueprint parallelizes.
+
 ## 5. Degradation and fallback
 
 **Built:**
